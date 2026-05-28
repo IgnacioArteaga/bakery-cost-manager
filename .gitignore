@@ -1,1 +1,5 @@
 PRIVATE_NOTES.md
+.env
+.env.local
+dist
+node_modules

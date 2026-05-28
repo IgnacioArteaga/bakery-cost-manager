@@ -24,9 +24,9 @@ Proyecto en desarrollo activo.
 
 ## Tecnologias
 
-- HTML
-- CSS
-- JavaScript
+- React
+- Vite
+- Tailwind CSS
 - Supabase
 
 ## Licencia
