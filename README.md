@@ -1,31 +1,34 @@
-# bakery-cost-manager
+# Bakery Cost Manager
 
-Aplicacion personal para registrar compras de pasteleria, mantener historico de precios por medida, crear recetas y calcular costos con mano de obra, gastos y margen.
+Bakery Cost Manager es una aplicacion web para apoyar la gestion de costos en preparaciones de pasteleria y reposteria.
 
-## Local
+Permite organizar ingredientes, registrar compras, mantener referencias de precios y estimar el costo de una receta considerando insumos, trabajo y gastos asociados.
 
-```bash
-python -m http.server 5173
-```
+## Objetivo
 
-Abrir:
+Ayudar a tomar mejores decisiones de precio y produccion, especialmente en emprendimientos pequenos o de uso personal donde los costos cambian con frecuencia.
 
-```txt
-http://localhost:5173/index.html
-```
+## Funcionalidades principales
 
-## Supabase
+- Registro de ingredientes.
+- Registro de compras.
+- Historico de precios.
+- Creacion de recetas.
+- Calculo de costos por receta.
+- Estimacion de costos por porcion.
+- Consideracion de mano de obra y gastos operativos.
 
-1. Ejecutar `SP.sql` completo en Supabase SQL Editor.
-2. Crear cuenta desde la app.
-3. Para hacer admin a un usuario, copiar su `id` desde `Authentication > Users` y ejecutar:
+## Estado
 
-```sql
-insert into app_admins (user_id)
-values ('USER_ID_AQUI')
-on conflict (user_id) do nothing;
-```
+Proyecto en desarrollo activo.
 
-## Deploy
+## Tecnologias
 
-Publicar el repositorio en Vercel como proyecto estatico. No requiere build command ni output directory especial.
+- HTML
+- CSS
+- JavaScript
+- Supabase
+
+## Licencia
+
+Uso personal.
