@@ -7,6 +7,27 @@
     <link rel="stylesheet" href="styles.css">
   </head>
   <body>
+    <section class="auth-screen" id="authScreen">
+      <form class="auth-card" id="authForm">
+        <span class="brand-mark">CP</span>
+        <h1>Costos Pasteleria</h1>
+        <p>Ingresa con tu correo para guardar compras, recetas y costos en Supabase.</p>
+        <label>
+          Email
+          <input name="email" type="email" autocomplete="email" required>
+        </label>
+        <label>
+          Contrasena
+          <input name="password" type="password" autocomplete="current-password" minlength="6" required>
+        </label>
+        <div class="auth-actions">
+          <button class="primary" name="mode" value="signin" type="submit">Entrar</button>
+          <button class="ghost" name="mode" value="signup" type="submit">Crear cuenta</button>
+        </div>
+        <p class="auth-message" id="authMessage"></p>
+      </form>
+    </section>
+
     <aside class="sidebar">
       <div class="brand">
         <span class="brand-mark">CP</span>
@@ -23,6 +44,7 @@
         <button class="nav-item" data-view="recipes">Recetas</button>
         <button class="nav-item" data-view="costing">Costeo</button>
         <button class="nav-item" data-view="settings">Costos fijos</button>
+        <button class="nav-item admin-only" data-view="admin">Admin</button>
       </nav>
     </aside>
 
@@ -32,7 +54,10 @@
           <p class="eyebrow">Uso personal</p>
           <h1 id="viewTitle">Resumen</h1>
         </div>
-        <button class="primary" id="seedDataBtn" type="button">Restaurar demo</button>
+        <div class="top-actions">
+          <button class="ghost" id="seedDataBtn" type="button">Cargar demo</button>
+          <button class="primary" id="signOutBtn" type="button">Salir</button>
+        </div>
       </header>
 
       <section class="view active" id="dashboard">
@@ -279,8 +304,39 @@
           </form>
         </section>
       </section>
+
+      <section class="view" id="admin">
+        <div class="content-grid wide">
+          <section class="panel">
+            <div class="panel-heading">
+              <h2>Usuarios</h2>
+              <button class="ghost" id="refreshAdminBtn" type="button">Actualizar</button>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Email</th>
+                    <th class="num">Compras</th>
+                    <th class="num">Recetas</th>
+                    <th class="num">Total compras</th>
+                  </tr>
+                </thead>
+                <tbody id="adminUserRows"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="panel">
+            <h2>Detalle usuario</h2>
+            <div id="adminDetail" class="stack">
+              <p class="empty">Selecciona un usuario para revisar su informacion.</p>
+            </div>
+          </section>
+        </div>
+      </section>
     </main>
 
-    <script src="app.js"></script>
+    <script type="module" src="app.js"></script>
   </body>
 </html>

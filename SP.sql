@@ -7,18 +7,23 @@
 
 create extension if not exists pgcrypto;
 
-create table if not exists settings (
-  id boolean primary key default true,
+create table if not exists app_settings (
+  owner_id uuid primary key references auth.users(id) on delete cascade default auth.uid(),
   hourly_rate numeric(12, 2) not null default 0,
   utilities_cost numeric(12, 2) not null default 0,
   other_cost numeric(12, 2) not null default 0,
   target_margin numeric(5, 2) not null default 0,
-  updated_at timestamptz not null default now(),
-  constraint settings_single_row check (id = true)
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists app_admins (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now()
 );
 
 create table if not exists ingredients (
   id uuid primary key default gen_random_uuid(),
+  owner_id uuid not null references auth.users(id) on delete cascade default auth.uid(),
   name text not null unique,
   base_unit text not null check (base_unit in ('g', 'ml', 'unidad')),
   created_at timestamptz not null default now(),
@@ -27,6 +32,7 @@ create table if not exists ingredients (
 
 create table if not exists purchases (
   id uuid primary key default gen_random_uuid(),
+  owner_id uuid not null references auth.users(id) on delete cascade default auth.uid(),
   ingredient_id uuid not null references ingredients(id) on delete restrict,
   purchase_date date not null,
   quantity numeric(12, 3) not null check (quantity > 0),
@@ -38,6 +44,7 @@ create table if not exists purchases (
 
 create table if not exists recipes (
   id uuid primary key default gen_random_uuid(),
+  owner_id uuid not null references auth.users(id) on delete cascade default auth.uid(),
   name text not null unique,
   servings integer not null check (servings > 0),
   labor_hours numeric(8, 2) not null default 0,
@@ -48,6 +55,7 @@ create table if not exists recipes (
 
 create table if not exists recipe_ingredients (
   id uuid primary key default gen_random_uuid(),
+  owner_id uuid not null references auth.users(id) on delete cascade default auth.uid(),
   recipe_id uuid not null references recipes(id) on delete cascade,
   ingredient_id uuid not null references ingredients(id) on delete restrict,
   quantity numeric(12, 3) not null check (quantity > 0),
@@ -55,9 +63,116 @@ create table if not exists recipe_ingredients (
   unique (recipe_id, ingredient_id, unit)
 );
 
-insert into settings (id)
-values (true)
-on conflict (id) do nothing;
+do $$
+begin
+  if not exists (
+    select 1
+    from information_schema.columns
+    where table_name = 'ingredients' and column_name = 'owner_id'
+  ) then
+    alter table ingredients add column owner_id uuid references auth.users(id) on delete cascade default auth.uid();
+  end if;
+
+  if not exists (
+    select 1
+    from information_schema.columns
+    where table_name = 'purchases' and column_name = 'owner_id'
+  ) then
+    alter table purchases add column owner_id uuid references auth.users(id) on delete cascade default auth.uid();
+  end if;
+
+  if not exists (
+    select 1
+    from information_schema.columns
+    where table_name = 'recipes' and column_name = 'owner_id'
+  ) then
+    alter table recipes add column owner_id uuid references auth.users(id) on delete cascade default auth.uid();
+  end if;
+
+  if not exists (
+    select 1
+    from information_schema.columns
+    where table_name = 'recipe_ingredients' and column_name = 'owner_id'
+  ) then
+    alter table recipe_ingredients add column owner_id uuid references auth.users(id) on delete cascade default auth.uid();
+  end if;
+end $$;
+
+alter table ingredients drop constraint if exists ingredients_name_key;
+alter table recipes drop constraint if exists recipes_name_key;
+
+create unique index if not exists ingredients_owner_name_idx
+on ingredients(owner_id, lower(name));
+
+create unique index if not exists recipes_owner_name_idx
+on recipes(owner_id, lower(name));
+
+drop function if exists sp_get_settings();
+drop function if exists sp_upsert_settings(numeric, numeric, numeric, numeric);
+drop function if exists sp_list_ingredients();
+drop function if exists sp_save_ingredient(text, text, uuid);
+drop function if exists sp_list_purchases(uuid, date, date);
+drop function if exists sp_save_purchase(uuid, date, numeric, text, numeric, text);
+drop function if exists sp_list_recipes();
+drop function if exists sp_save_recipe(text, integer, numeric, uuid);
+drop function if exists sp_replace_recipe_ingredients(uuid, jsonb);
+drop function if exists sp_calculate_recipe_cost(uuid, integer, numeric, numeric, numeric, numeric, numeric);
+drop function if exists sp_recipe_cost_summary();
+drop function if exists sp_delete_recipe(uuid);
+drop function if exists sp_is_admin();
+drop function if exists sp_admin_overview();
+drop function if exists sp_admin_user_details(uuid);
+drop table if exists settings;
+
+alter table app_settings enable row level security;
+alter table app_admins enable row level security;
+alter table ingredients enable row level security;
+alter table purchases enable row level security;
+alter table recipes enable row level security;
+alter table recipe_ingredients enable row level security;
+
+drop policy if exists app_settings_owner_all on app_settings;
+create policy app_settings_owner_all on app_settings
+  for all using (owner_id = auth.uid())
+  with check (owner_id = auth.uid());
+
+drop policy if exists app_admins_self_read on app_admins;
+create policy app_admins_self_read on app_admins
+  for select using (user_id = auth.uid());
+
+drop policy if exists ingredients_owner_all on ingredients;
+create policy ingredients_owner_all on ingredients
+  for all using (owner_id = auth.uid())
+  with check (owner_id = auth.uid());
+
+drop policy if exists purchases_owner_all on purchases;
+create policy purchases_owner_all on purchases
+  for all using (owner_id = auth.uid())
+  with check (owner_id = auth.uid());
+
+drop policy if exists recipes_owner_all on recipes;
+create policy recipes_owner_all on recipes
+  for all using (owner_id = auth.uid())
+  with check (owner_id = auth.uid());
+
+drop policy if exists recipe_ingredients_owner_all on recipe_ingredients;
+create policy recipe_ingredients_owner_all on recipe_ingredients
+  for all using (owner_id = auth.uid())
+  with check (owner_id = auth.uid());
+
+create or replace function sp_is_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public, auth
+as $$
+  select exists (
+    select 1
+    from public.app_admins aa
+    where aa.user_id = auth.uid()
+  );
+$$;
 
 create or replace function sp_base_quantity(p_quantity numeric, p_unit text)
 returns numeric
@@ -70,21 +185,21 @@ as $$
   end;
 $$;
 
-create or replace function sp_upsert_settings(
+create or replace function sp_upsert_app_settings(
   p_hourly_rate numeric,
   p_utilities_cost numeric,
   p_other_cost numeric,
   p_target_margin numeric
 )
-returns settings
+returns app_settings
 language plpgsql
 as $$
 declare
-  v_settings settings;
+  v_settings app_settings;
 begin
-  insert into settings (id, hourly_rate, utilities_cost, other_cost, target_margin, updated_at)
-  values (true, p_hourly_rate, p_utilities_cost, p_other_cost, p_target_margin, now())
-  on conflict (id) do update set
+  insert into app_settings (owner_id, hourly_rate, utilities_cost, other_cost, target_margin, updated_at)
+  values (auth.uid(), p_hourly_rate, p_utilities_cost, p_other_cost, p_target_margin, now())
+  on conflict (owner_id) do update set
     hourly_rate = excluded.hourly_rate,
     utilities_cost = excluded.utilities_cost,
     other_cost = excluded.other_cost,
@@ -97,13 +212,13 @@ end;
 $$;
 
 create or replace function sp_get_settings()
-returns settings
+returns app_settings
 language sql
 stable
 as $$
   select *
-  from settings
-  where id = true;
+  from app_settings
+  where owner_id = auth.uid();
 $$;
 
 create or replace function sp_save_ingredient(
@@ -118,8 +233,8 @@ declare
   v_ingredient ingredients;
 begin
   if p_id is null then
-    insert into ingredients (name, base_unit)
-    values (trim(p_name), p_base_unit)
+    insert into ingredients (owner_id, name, base_unit)
+    values (auth.uid(), trim(p_name), p_base_unit)
     returning * into v_ingredient;
   else
     update ingredients
@@ -127,6 +242,7 @@ begin
         base_unit = p_base_unit,
         updated_at = now()
     where id = p_id
+      and owner_id = auth.uid()
     returning * into v_ingredient;
   end if;
 
@@ -156,9 +272,11 @@ as $$
     select p.*
     from purchases p
     where p.ingredient_id = i.id
+      and p.owner_id = auth.uid()
     order by p.purchase_date desc, p.created_at desc
     limit 1
   ) lp on true
+  where i.owner_id = auth.uid()
   order by i.name;
 $$;
 
@@ -177,6 +295,7 @@ declare
   v_purchase purchases;
 begin
   insert into purchases (
+    owner_id,
     ingredient_id,
     purchase_date,
     quantity,
@@ -185,6 +304,7 @@ begin
     notes
   )
   values (
+    auth.uid(),
     p_ingredient_id,
     p_purchase_date,
     p_quantity,
@@ -228,8 +348,9 @@ as $$
     p.total_price / nullif(sp_base_quantity(p.quantity, p.unit), 0) as unit_price,
     p.notes
   from purchases p
-  join ingredients i on i.id = p.ingredient_id
+  join ingredients i on i.id = p.ingredient_id and i.owner_id = auth.uid()
   where (p_ingredient_id is null or p.ingredient_id = p_ingredient_id)
+    and p.owner_id = auth.uid()
     and (p_from is null or p.purchase_date >= p_from)
     and (p_to is null or p.purchase_date <= p_to)
   order by p.purchase_date desc, p.created_at desc;
@@ -248,8 +369,8 @@ declare
   v_recipe recipes;
 begin
   if p_id is null then
-    insert into recipes (name, servings, labor_hours)
-    values (trim(p_name), p_servings, coalesce(p_labor_hours, 0))
+    insert into recipes (owner_id, name, servings, labor_hours)
+    values (auth.uid(), trim(p_name), p_servings, coalesce(p_labor_hours, 0))
     returning * into v_recipe;
   else
     update recipes
@@ -258,6 +379,7 @@ begin
         labor_hours = coalesce(p_labor_hours, 0),
         updated_at = now()
     where id = p_id
+      and owner_id = auth.uid()
     returning * into v_recipe;
   end if;
 
@@ -280,10 +402,12 @@ language plpgsql
 as $$
 begin
   delete from recipe_ingredients
-  where recipe_ingredients.recipe_id = p_recipe_id;
+  where recipe_ingredients.recipe_id = p_recipe_id
+    and recipe_ingredients.owner_id = auth.uid();
 
-  insert into recipe_ingredients (recipe_id, ingredient_id, quantity, unit)
+  insert into recipe_ingredients (owner_id, recipe_id, ingredient_id, quantity, unit)
   select
+    auth.uid(),
     p_recipe_id,
     (item->>'ingredient_id')::uuid,
     (item->>'quantity')::numeric,
@@ -299,6 +423,7 @@ begin
     ri.unit
   from recipe_ingredients ri
   where ri.recipe_id = p_recipe_id
+    and ri.owner_id = auth.uid()
   order by ri.id;
 end;
 $$;
@@ -336,8 +461,9 @@ as $$
     ) as ingredients
   from recipes r
   left join recipe_ingredients ri on ri.recipe_id = r.id
-  left join ingredients i on i.id = ri.ingredient_id
+  left join ingredients i on i.id = ri.ingredient_id and i.owner_id = auth.uid()
   where r.active = true
+    and r.owner_id = auth.uid()
   group by r.id
   order by r.name;
 $$;
@@ -372,22 +498,24 @@ as $$
       coalesce(p_utilities_cost, s.utilities_cost) as utilities_cost,
       coalesce(p_other_cost, s.other_cost) as other_cost,
       coalesce(p_target_margin, s.target_margin) as target_margin
-    from settings s
-    where s.id = true
+    from app_settings s
+    where s.owner_id = auth.uid()
   ),
   recipe_data as (
     select
       r.*,
       coalesce(p_target_servings, r.servings) as target_servings,
-      coalesce(p_labor_hours, r.labor_hours) as labor_hours
+      coalesce(p_labor_hours, r.labor_hours) as effective_labor_hours
     from recipes r
     where r.id = p_recipe_id
+      and r.owner_id = auth.uid()
   ),
   latest_prices as (
     select distinct on (p.ingredient_id)
       p.ingredient_id,
       p.total_price / nullif(sp_base_quantity(p.quantity, p.unit), 0) as unit_price
     from purchases p
+    where p.owner_id = auth.uid()
     order by p.ingredient_id, p.purchase_date desc, p.created_at desc
   ),
   ingredient_total as (
@@ -399,7 +527,7 @@ as $$
         * (rd.target_servings::numeric / rd.servings::numeric)
       ), 0) as ingredient_cost
     from recipe_data rd
-    left join recipe_ingredients ri on ri.recipe_id = rd.id
+    left join recipe_ingredients ri on ri.recipe_id = rd.id and ri.owner_id = auth.uid()
     left join latest_prices lp on lp.ingredient_id = ri.ingredient_id
     group by rd.id
   ),
@@ -410,9 +538,9 @@ as $$
       rd.servings as base_servings,
       rd.target_servings,
       it.ingredient_cost,
-      rd.labor_hours * cfg.hourly_rate as labor_cost,
+      rd.effective_labor_hours * cfg.hourly_rate as labor_cost,
       cfg.utilities_cost + cfg.other_cost as overhead_cost,
-      it.ingredient_cost + (rd.labor_hours * cfg.hourly_rate) + cfg.utilities_cost + cfg.other_cost as total_cost,
+      it.ingredient_cost + (rd.effective_labor_hours * cfg.hourly_rate) + cfg.utilities_cost + cfg.other_cost as total_cost,
       cfg.target_margin
     from recipe_data rd
     cross join cfg
@@ -456,15 +584,17 @@ as $$
       coalesce(lp.unit_price, 0) * sp_base_quantity(ri.quantity, ri.unit)
     ), 0) as ingredient_cost
   from recipes r
-  left join recipe_ingredients ri on ri.recipe_id = r.id
+  left join recipe_ingredients ri on ri.recipe_id = r.id and ri.owner_id = auth.uid()
   left join lateral (
     select p.total_price / nullif(sp_base_quantity(p.quantity, p.unit), 0) as unit_price
     from purchases p
     where p.ingredient_id = ri.ingredient_id
+      and p.owner_id = auth.uid()
     order by p.purchase_date desc, p.created_at desc
     limit 1
   ) lp on true
   where r.active = true
+    and r.owner_id = auth.uid()
   group by r.id
   order by r.name;
 $$;
@@ -476,5 +606,156 @@ as $$
   update recipes
   set active = false,
       updated_at = now()
-  where id = p_recipe_id;
+  where id = p_recipe_id
+    and owner_id = auth.uid();
 $$;
+
+create or replace function sp_admin_overview()
+returns table (
+  user_id uuid,
+  email text,
+  created_at timestamptz,
+  last_sign_in_at timestamptz,
+  ingredient_count bigint,
+  purchase_count bigint,
+  recipe_count bigint,
+  last_purchase_date date,
+  total_purchase_amount numeric
+)
+language plpgsql
+stable
+security definer
+set search_path = public, auth
+as $$
+begin
+  if not public.sp_is_admin() then
+    raise exception 'No autorizado';
+  end if;
+
+  return query
+  with ingredient_totals as (
+    select owner_id, count(*) as ingredient_count
+    from public.ingredients
+    group by owner_id
+  ),
+  purchase_totals as (
+    select
+      owner_id,
+      count(*) as purchase_count,
+      max(purchase_date) as last_purchase_date,
+      coalesce(sum(total_price), 0)::numeric as total_purchase_amount
+    from public.purchases
+    group by owner_id
+  ),
+  recipe_totals as (
+    select owner_id, count(*) filter (where active = true) as recipe_count
+    from public.recipes
+    group by owner_id
+  )
+  select
+    u.id as user_id,
+    u.email::text,
+    u.created_at,
+    u.last_sign_in_at,
+    coalesce(it.ingredient_count, 0) as ingredient_count,
+    coalesce(pt.purchase_count, 0) as purchase_count,
+    coalesce(rt.recipe_count, 0) as recipe_count,
+    pt.last_purchase_date,
+    coalesce(pt.total_purchase_amount, 0) as total_purchase_amount
+  from auth.users u
+  left join ingredient_totals it on it.owner_id = u.id
+  left join purchase_totals pt on pt.owner_id = u.id
+  left join recipe_totals rt on rt.owner_id = u.id
+  order by u.created_at desc;
+end;
+$$;
+
+create or replace function sp_admin_user_details(p_user_id uuid)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public, auth
+as $$
+declare
+  v_result jsonb;
+begin
+  if not public.sp_is_admin() then
+    raise exception 'No autorizado';
+  end if;
+
+  select jsonb_build_object(
+    'user', jsonb_build_object(
+      'id', u.id,
+      'email', u.email,
+      'created_at', u.created_at,
+      'last_sign_in_at', u.last_sign_in_at
+    ),
+    'settings', (
+      select to_jsonb(s)
+      from public.app_settings s
+      where s.owner_id = p_user_id
+    ),
+    'ingredients', coalesce((
+      select jsonb_agg(to_jsonb(i) order by i.name)
+      from public.ingredients i
+      where i.owner_id = p_user_id
+    ), '[]'::jsonb),
+    'purchases', coalesce((
+      select jsonb_agg(
+        jsonb_build_object(
+          'id', p.id,
+          'purchase_date', p.purchase_date,
+          'ingredient_id', p.ingredient_id,
+          'ingredient_name', i.name,
+          'quantity', p.quantity,
+          'unit', p.unit,
+          'total_price', p.total_price,
+          'notes', p.notes
+        )
+        order by p.purchase_date desc, p.created_at desc
+      )
+      from public.purchases p
+      join public.ingredients i on i.id = p.ingredient_id
+      where p.owner_id = p_user_id
+    ), '[]'::jsonb),
+    'recipes', coalesce((
+      select jsonb_agg(
+        jsonb_build_object(
+          'id', r.id,
+          'name', r.name,
+          'servings', r.servings,
+          'labor_hours', r.labor_hours,
+          'active', r.active,
+          'ingredients', coalesce((
+            select jsonb_agg(
+              jsonb_build_object(
+                'ingredient_name', i.name,
+                'quantity', ri.quantity,
+                'unit', ri.unit
+              )
+              order by i.name
+            )
+            from public.recipe_ingredients ri
+            join public.ingredients i on i.id = ri.ingredient_id
+            where ri.recipe_id = r.id
+          ), '[]'::jsonb)
+        )
+        order by r.name
+      )
+      from public.recipes r
+      where r.owner_id = p_user_id
+    ), '[]'::jsonb)
+  )
+  into v_result
+  from auth.users u
+  where u.id = p_user_id;
+
+  return v_result;
+end;
+$$;
+
+grant usage on schema public to anon, authenticated;
+grant all on app_settings, ingredients, purchases, recipes, recipe_ingredients to authenticated;
+grant select on app_admins to authenticated;
+grant execute on all functions in schema public to authenticated;
