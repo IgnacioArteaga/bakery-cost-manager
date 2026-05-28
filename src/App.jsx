@@ -459,7 +459,7 @@ export default function App() {
       <main className="min-w-0 p-5 lg:p-7">
         <header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="mb-1 text-xs font-black uppercase text-muted">Uso personales</p>
+            <p className="mb-1 text-xs font-black uppercase text-muted">Uso personal</p>
             <h1 className="text-3xl font-black">{viewTitle}</h1>
           </div>
           <div className="flex gap-3">
