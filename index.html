@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Costos Pasteleria</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="brand-mark">CP</span>
+        <div>
+          <strong>Costos Pasteleria</strong>
+          <small>compras, recetas y precios</small>
+        </div>
+      </div>
+
+      <nav class="nav" aria-label="Principal">
+        <button class="nav-item active" data-view="dashboard">Resumen</button>
+        <button class="nav-item" data-view="purchases">Compras</button>
+        <button class="nav-item" data-view="ingredients">Ingredientes</button>
+        <button class="nav-item" data-view="recipes">Recetas</button>
+        <button class="nav-item" data-view="costing">Costeo</button>
+        <button class="nav-item" data-view="settings">Costos fijos</button>
+      </nav>
+    </aside>
+
+    <main class="shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Uso personal</p>
+          <h1 id="viewTitle">Resumen</h1>
+        </div>
+        <button class="primary" id="seedDataBtn" type="button">Restaurar demo</button>
+      </header>
+
+      <section class="view active" id="dashboard">
+        <div class="metrics">
+          <article class="metric">
+            <small>Ingredientes</small>
+            <strong id="metricIngredients">0</strong>
+          </article>
+          <article class="metric">
+            <small>Recetas</small>
+            <strong id="metricRecipes">0</strong>
+          </article>
+          <article class="metric">
+            <small>Compras registradas</small>
+            <strong id="metricPurchases">0</strong>
+          </article>
+          <article class="metric">
+            <small>Receta mas cara</small>
+            <strong id="metricExpensive">$0</strong>
+          </article>
+        </div>
+
+        <div class="content-grid">
+          <section class="panel">
+            <div class="panel-heading">
+              <h2>Ultimas compras</h2>
+              <button class="ghost" data-jump="purchases" type="button">Agregar</button>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Ingrediente</th>
+                    <th>Medida</th>
+                    <th class="num">Precio unit.</th>
+                  </tr>
+                </thead>
+                <tbody id="recentPurchases"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-heading">
+              <h2>Costos por receta</h2>
+              <button class="ghost" data-jump="costing" type="button">Calcular</button>
+            </div>
+            <div id="recipeCostList" class="stack"></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="view" id="purchases">
+        <div class="content-grid">
+          <form class="panel form" id="purchaseForm">
+            <h2>Nueva compra</h2>
+            <label>
+              Fecha
+              <input name="date" type="date" required>
+            </label>
+            <label>
+              Ingrediente
+              <select name="ingredientId" required></select>
+            </label>
+            <div class="two-cols">
+              <label>
+                Cantidad
+                <input name="quantity" type="number" min="0.01" step="0.01" required>
+              </label>
+              <label>
+                Unidad
+                <select name="unit" required>
+                  <option value="g">g</option>
+                  <option value="kg">kg</option>
+                  <option value="ml">ml</option>
+                  <option value="l">l</option>
+                  <option value="unidad">unidad</option>
+                </select>
+              </label>
+            </div>
+            <label>
+              Precio pagado
+              <input name="price" type="number" min="1" step="1" required>
+            </label>
+            <button class="primary" type="submit">Guardar compra</button>
+          </form>
+
+          <section class="panel">
+            <h2>Historico de precios</h2>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Ingrediente</th>
+                    <th>Compra</th>
+                    <th class="num">Precio unitario</th>
+                  </tr>
+                </thead>
+                <tbody id="purchaseRows"></tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="view" id="ingredients">
+        <div class="content-grid">
+          <form class="panel form" id="ingredientForm">
+            <h2>Nuevo ingrediente</h2>
+            <label>
+              Nombre
+              <input name="name" type="text" placeholder="Harina, azucar, huevos" required>
+            </label>
+            <label>
+              Unidad base
+              <select name="baseUnit" required>
+                <option value="g">g</option>
+                <option value="ml">ml</option>
+                <option value="unidad">unidad</option>
+              </select>
+            </label>
+            <button class="primary" type="submit">Guardar ingrediente</button>
+          </form>
+
+          <section class="panel">
+            <h2>Lista de ingredientes</h2>
+            <div id="ingredientCards" class="card-grid"></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="view" id="recipes">
+        <div class="content-grid wide">
+          <form class="panel form" id="recipeForm">
+            <h2>Nueva receta</h2>
+            <label>
+              Nombre
+              <input name="name" type="text" placeholder="Torta de chocolate" required>
+            </label>
+            <label>
+              Personas o porciones
+              <input name="servings" type="number" min="1" step="1" required>
+            </label>
+            <div class="recipe-lines" id="recipeIngredientLines"></div>
+            <button class="ghost" id="addRecipeLine" type="button">Agregar ingrediente</button>
+            <button class="primary" type="submit">Guardar receta</button>
+          </form>
+
+          <section class="panel">
+            <h2>Recetas guardadas</h2>
+            <div id="recipeCards" class="stack"></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="view" id="costing">
+        <section class="panel calculator">
+          <div class="panel-heading">
+            <h2>Calculadora de costo</h2>
+            <select id="costRecipeSelect"></select>
+          </div>
+
+          <div class="cost-layout">
+            <form class="form compact" id="costForm">
+              <label>
+                Porciones a producir
+                <input name="targetServings" type="number" min="1" step="1" required>
+              </label>
+              <label>
+                Horas de trabajo
+                <input name="laborHours" type="number" min="0" step="0.25" required>
+              </label>
+              <label>
+                Costo hora mano de obra
+                <input name="hourlyRate" type="number" min="0" step="1" required>
+              </label>
+              <label>
+                Luz / agua / gas
+                <input name="utilities" type="number" min="0" step="1" required>
+              </label>
+              <label>
+                Otros gastos
+                <input name="otherCosts" type="number" min="0" step="1" required>
+              </label>
+              <label>
+                Margen deseado %
+                <input name="margin" type="number" min="0" max="95" step="1" required>
+              </label>
+            </form>
+
+            <div class="result-box">
+              <div>
+                <span>Ingredientes</span>
+                <strong id="costIngredients">$0</strong>
+              </div>
+              <div>
+                <span>Mano de obra</span>
+                <strong id="costLabor">$0</strong>
+              </div>
+              <div>
+                <span>Gastos</span>
+                <strong id="costOverhead">$0</strong>
+              </div>
+              <div class="total">
+                <span>Costo total</span>
+                <strong id="costTotal">$0</strong>
+              </div>
+              <div>
+                <span>Costo por porcion</span>
+                <strong id="costPerServing">$0</strong>
+              </div>
+              <div>
+                <span>Precio sugerido</span>
+                <strong id="costSuggested">$0</strong>
+              </div>
+            </div>
+          </div>
+        </section>
+      </section>
+
+      <section class="view" id="settings">
+        <section class="panel settings-panel">
+          <h2>Parametros por defecto</h2>
+          <form class="form compact" id="settingsForm">
+            <label>
+              Costo hora mano de obra
+              <input name="hourlyRate" type="number" min="0" step="1">
+            </label>
+            <label>
+              Luz / agua / gas por receta
+              <input name="utilities" type="number" min="0" step="1">
+            </label>
+            <label>
+              Otros gastos por receta
+              <input name="otherCosts" type="number" min="0" step="1">
+            </label>
+            <label>
+              Margen deseado %
+              <input name="margin" type="number" min="0" max="95" step="1">
+            </label>
+            <button class="primary" type="submit">Guardar parametros</button>
+          </form>
+        </section>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
