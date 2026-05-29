@@ -1,12 +1,12 @@
 @import "tailwindcss";
 
 @theme {
-  --color-cream: #f7f4ec;
-  --color-ink: #1d2926;
-  --color-muted: #61706b;
-  --color-line: #d7e1dd;
-  --color-brand: #1e6f5c;
-  --color-brand-dark: #145245;
+  --color-ink: #102033;
+  --color-muted: #617089;
+  --color-line: #d6e0ee;
+  --color-brand: #2563eb;
+  --color-brand-dark: #1d4ed8;
+  --color-brand-soft: #dbeafe;
 }
 
 @layer base {
@@ -15,7 +15,10 @@
   }
 
   body {
-    @apply min-h-screen bg-[#f3f7f6] text-ink;
+    @apply min-h-screen bg-[#f3f7f6] text-ink antialiased;
+    background:
+      radial-gradient(circle at top left, rgba(37, 99, 235, 0.10), transparent 32rem),
+      linear-gradient(180deg, #f8fbff 0%, #eef5ff 100%);
   }
 
   button {
@@ -24,7 +27,7 @@
 
   input,
   select {
-    @apply min-h-11 w-full rounded-lg border border-line bg-white px-3 text-sm text-ink outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/15;
+    @apply min-h-11 w-full rounded-lg border border-line bg-white px-3 text-sm text-ink outline-none transition placeholder:text-muted/60 focus:border-brand focus:ring-4 focus:ring-brand/15;
   }
 
   label {
@@ -32,11 +35,11 @@
   }
 
   table {
-    @apply w-full min-w-[560px] border-collapse;
+    @apply w-full min-w-[620px] border-collapse;
   }
 
   th {
-    @apply border-b border-line px-3 py-3 text-left text-xs font-bold uppercase text-muted;
+    @apply border-b border-line bg-[#f8fbff] px-3 py-3 text-left text-xs font-bold uppercase text-muted first:rounded-l-lg last:rounded-r-lg;
   }
 
   td {
@@ -46,22 +49,58 @@
 
 @layer components {
   .btn-primary {
-    @apply min-h-10 rounded-lg bg-brand px-4 text-sm font-bold text-white transition hover:bg-brand-dark;
+    @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-brand px-4 text-sm font-bold text-white transition hover:bg-brand-dark;
   }
 
   .btn-ghost {
-    @apply min-h-10 rounded-lg bg-[#e5efeb] px-4 text-sm font-bold text-ink transition hover:bg-[#d8e7e1];
+    @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-brand-soft px-4 text-sm font-bold text-brand-dark transition hover:bg-blue-200;
+  }
+
+  .btn-subtle {
+    @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-line bg-white px-4 text-sm font-bold text-ink transition hover:bg-[#f8fbff];
   }
 
   .panel {
-    @apply rounded-lg border border-line bg-white p-5 shadow-[0_18px_50px_rgba(22,49,44,0.1)];
+    @apply rounded-lg border border-line bg-white p-5 shadow-[0_18px_50px_rgba(15,49,95,0.08)];
   }
 
   .item {
-    @apply rounded-lg border border-line bg-[#f8fbfa] p-4;
+    @apply rounded-lg border border-line bg-[#f8fbff] p-4 transition hover:border-brand/30;
   }
 
   .pill {
-    @apply inline-flex rounded-full border border-line bg-[#e5efeb] px-3 py-1.5 text-xs text-ink;
+    @apply inline-flex items-center gap-1 rounded-full border border-blue-100 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-900;
+  }
+
+  .section-title {
+    @apply text-base font-black tracking-tight text-ink;
+  }
+
+  .section-copy {
+    @apply mt-1 text-sm text-muted;
+  }
+
+  .empty-state {
+    @apply rounded-lg border border-dashed border-line bg-[#f8fbff] p-6 text-center text-sm text-muted;
+  }
+
+  .nav-button {
+    @apply flex items-center gap-3 rounded-lg px-4 py-3 text-left text-sm font-semibold transition;
+  }
+
+  .nav-button-active {
+    @apply bg-white text-[#0f2a4a] shadow-sm;
+  }
+
+  .nav-button-idle {
+    @apply text-blue-100/90 hover:bg-white/10 hover:text-white;
+  }
+
+  .modal-backdrop {
+    @apply fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4 backdrop-blur-sm;
+  }
+
+  .modal-panel {
+    @apply max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-lg border border-line bg-white p-5 shadow-2xl;
   }
 }

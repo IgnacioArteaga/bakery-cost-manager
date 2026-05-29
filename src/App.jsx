@@ -1,4 +1,33 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  BarChart3,
+  Calculator,
+  ChefHat,
+  ClipboardList,
+  Database,
+  LineChart as LineChartIcon,
+  Loader2,
+  LogOut,
+  Package,
+  Plus,
+  RefreshCw,
+  Save,
+  Settings2,
+  ShieldCheck,
+  ShoppingBag,
+  Sparkles,
+  Trash2,
+  UserRound
+} from "lucide-react";
+import {
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis
+} from "recharts";
 import { demoData } from "./lib/demoData";
 import { baseQuantity, money, unitLabel } from "./lib/format";
 import { mapIngredient, mapPurchase, mapRecipe, mapRecipeCost, mapSettings } from "./lib/mappers";
@@ -15,12 +44,12 @@ const emptyState = {
 };
 
 const views = [
-  ["dashboard", "Resumen"],
-  ["purchases", "Compras"],
-  ["ingredients", "Ingredientes"],
-  ["recipes", "Recetas"],
-  ["costing", "Costeo"],
-  ["settings", "Costos fijos"]
+  ["dashboard", "Resumen", BarChart3],
+  ["purchases", "Compras", ShoppingBag],
+  ["ingredients", "Ingredientes", Package],
+  ["recipes", "Recetas", ClipboardList],
+  ["costing", "Costeo", Calculator],
+  ["settings", "Costos fijos", Settings2]
 ];
 
 async function rpc(name, params = {}) {
@@ -65,6 +94,49 @@ function Panel({ children, className = "" }) {
   return <section className={`panel ${className}`}>{children}</section>;
 }
 
+function SectionHeader({ title, copy, action }) {
+  return (
+    <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div>
+        <h2 className="section-title">{title}</h2>
+        {copy && <p className="section-copy">{copy}</p>}
+      </div>
+      {action}
+    </div>
+  );
+}
+
+function EmptyState({ title, copy, icon: Icon = Database }) {
+  return (
+    <div className="empty-state">
+      <Icon className="mx-auto mb-3 h-8 w-8 text-brand" strokeWidth={1.8} />
+      <strong className="block text-ink">{title}</strong>
+      {copy && <p className="mt-1">{copy}</p>}
+    </div>
+  );
+}
+
+function Spinner({ className = "h-4 w-4" }) {
+  return <Loader2 className={`${className} animate-spin`} />;
+}
+
+function Modal({ children, onClose, title }) {
+  return (
+    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label={title}>
+      <div className="modal-panel">
+        <div className="mb-4 flex items-start justify-between gap-4 border-b border-line pb-4">
+          <div>
+            <h2 className="section-title">{title}</h2>
+            <p className="section-copy">Completa los datos y guarda para actualizar el panel.</p>
+          </div>
+          <button className="btn-subtle" type="button" onClick={onClose}>Cerrar</button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [session, setSession] = useState(null);
   const [view, setView] = useState("dashboard");
@@ -72,6 +144,7 @@ export default function App() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
+  const [modal, setModal] = useState(null);
   const [authMessage, setAuthMessage] = useState("");
   const [recipeLines, setRecipeLines] = useState([{ ingredientId: "", quantity: 100, unit: "g" }]);
   const [costInput, setCostInput] = useState({
@@ -85,7 +158,7 @@ export default function App() {
   });
   const [costResult, setCostResult] = useState(null);
 
-  const navItems = isAdmin ? [...views, ["admin", "Admin"]] : views;
+  const navItems = isAdmin ? [...views, ["admin", "Admin", ShieldCheck]] : views;
   const viewTitle = navItems.find(([key]) => key === view)?.[1] ?? "Resumen";
 
   const ingredientOptions = useMemo(() => data.ingredients, [data.ingredients]);
@@ -302,6 +375,7 @@ export default function App() {
         p_base_unit: form.get("baseUnit")
       });
       event.currentTarget.reset();
+      setModal(null);
       await refresh();
     } catch (error) {
       alert(error.message);
@@ -323,6 +397,7 @@ export default function App() {
         p_total_price: Number(form.get("price"))
       });
       event.currentTarget.reset();
+      setModal(null);
       await refresh();
     } catch (error) {
       alert(error.message);
@@ -351,6 +426,7 @@ export default function App() {
       });
       event.currentTarget.reset();
       setRecipeLines([{ ingredientId: data.ingredients[0]?.id || "", quantity: 100, unit: data.ingredients[0]?.baseUnit || "g" }]);
+      setModal(null);
       await refresh();
     } catch (error) {
       alert(error.message);
@@ -396,17 +472,26 @@ export default function App() {
   }
 
   if (loading) {
-    return <div className="grid min-h-screen place-items-center text-sm text-muted">Cargando...</div>;
+    return (
+      <div className="grid min-h-screen place-items-center text-sm text-muted">
+        <div className="flex items-center gap-3 rounded-lg border border-line bg-white px-4 py-3 shadow-sm">
+          <Spinner />
+          Cargando espacio de trabajo
+        </div>
+      </div>
+    );
   }
 
   if (!session) {
     return (
-      <main className="grid min-h-screen place-items-center bg-[#f3f7f6] p-6">
-        <form onSubmit={handleAuth} className="panel grid w-full max-w-md gap-4">
-          <span className="grid h-11 w-11 place-items-center rounded-lg bg-[#f2c36b] font-black text-[#183d36]">BC</span>
+      <main className="grid min-h-screen place-items-center p-6">
+        <form onSubmit={handleAuth} className="panel grid w-full max-w-md gap-5">
+          <span className="grid h-12 w-12 place-items-center rounded-lg bg-blue-100 text-blue-800 shadow-sm">
+            <ChefHat className="h-6 w-6" />
+          </span>
           <div>
-            <h1 className="text-3xl font-black">Bakery Cost Manager</h1>
-            <p className="mt-2 text-sm text-muted">Ingresa para guardar compras, recetas y costos en Supabase.</p>
+            <h1 className="text-3xl font-black tracking-tight">Bakery Cost Manager</h1>
+            <p className="mt-2 text-sm leading-6 text-muted">Gestiona compras, recetas y costos con una vista clara de tu operacion.</p>
           </div>
           <Field label="Email">
             <input name="email" type="email" autoComplete="email" required />
@@ -416,72 +501,76 @@ export default function App() {
           </Field>
           <div className="flex gap-3">
             <button className="btn-primary flex-1" name="mode" value="signin" type="submit" disabled={busy === "signin"}>
-              {busy === "signin" ? "Entrando..." : "Entrar"}
+              {busy === "signin" ? <><Spinner /> Entrando</> : <>Entrar</>}
             </button>
             <button className="btn-ghost flex-1" name="mode" value="signup" type="submit" disabled={busy === "signup"}>
-              {busy === "signup" ? "Creando..." : "Crear cuenta"}
+              {busy === "signup" ? <><Spinner /> Creando</> : <>Crear cuenta</>}
             </button>
           </div>
-          {authMessage && <p className="text-sm text-muted">{authMessage}</p>}
+          {authMessage && <p className="rounded-lg bg-[#f8fbff] px-3 py-2 text-sm text-muted">{authMessage}</p>}
         </form>
       </main>
     );
   }
 
   return (
-    <div className="min-h-screen lg:grid lg:grid-cols-[280px_minmax(0,1fr)]">
-      <aside className="bg-[#183d36] p-6 text-white lg:min-h-screen">
+    <div className="min-h-screen lg:grid lg:grid-cols-[288px_minmax(0,1fr)]">
+      <aside className="bg-[#0f2a4a] p-5 text-white lg:sticky lg:top-0 lg:min-h-screen lg:p-6">
         <div className="mb-8 flex items-center gap-3">
-          <span className="grid h-11 w-11 place-items-center rounded-lg bg-[#f2c36b] font-black text-[#183d36]">BC</span>
+          <span className="grid h-11 w-11 place-items-center rounded-lg bg-blue-100 text-blue-800 shadow-sm">
+            <ChefHat className="h-6 w-6" />
+          </span>
           <div>
             <strong className="block">Bakery Cost Manager</strong>
-            <small className="text-[#c4d7d1]">compras, recetas y precios</small>
+            <small className="text-blue-100/80">costos y recetas</small>
           </div>
         </div>
         <nav className="grid gap-2 sm:grid-cols-3 lg:grid-cols-1">
-          {navItems.map(([key, label]) => (
+          {navItems.map(([key, label, Icon]) => (
             <button
               key={key}
               onClick={() => {
                 setView(key);
                 if (key === "admin") loadAdminOverview();
               }}
-              className={`rounded-lg px-4 py-3 text-left text-sm font-semibold transition ${
-                view === key ? "bg-white/15 text-white" : "text-[#e8f1ed] hover:bg-white/10"
-              }`}
+              className={`nav-button ${view === key ? "nav-button-active" : "nav-button-idle"}`}
             >
+              <Icon className="h-4 w-4" />
               {label}
             </button>
           ))}
         </nav>
+        <div className="mt-8 rounded-lg border border-white/10 bg-white/5 p-4 text-sm text-blue-100/80">
+          <p className="font-semibold text-white">Sesion activa</p>
+          <p className="mt-1 truncate">{session.user.email}</p>
+        </div>
       </aside>
 
-      <main className="min-w-0 p-5 lg:p-7">
-        <header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <main className="min-w-0 p-5 lg:p-8">
+        <header className="mb-7 flex flex-col gap-4 border-b border-line pb-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="mb-1 text-xs font-black uppercase text-muted">Uso personal</p>
-            <h1 className="text-3xl font-black">{viewTitle}</h1>
+            <p className="mb-1 text-xs font-black uppercase text-muted">Panel operativo</p>
+            <h1 className="text-3xl font-black tracking-tight">{viewTitle}</h1>
           </div>
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-3">
             <button className="btn-ghost" onClick={loadDemoData} disabled={busy === "demo"}>
-              {busy === "demo" ? "Cargando..." : "Cargar demo"}
+              {busy === "demo" ? <><Spinner /> Cargando</> : <><Sparkles className="h-4 w-4" /> Cargar demo</>}
             </button>
-            <button className="btn-primary" onClick={signOut}>Salir</button>
+            <button className="btn-subtle" onClick={signOut}><LogOut className="h-4 w-4" /> Salir</button>
           </div>
         </header>
 
         {view === "dashboard" && <Dashboard data={data} />}
         {view === "purchases" && (
-          <Purchases data={data} ingredientOptions={ingredientOptions} savePurchase={savePurchase} busy={busy} />
+          <Purchases data={data} openModal={setModal} />
         )}
-        {view === "ingredients" && <Ingredients data={data} saveIngredient={saveIngredient} busy={busy} />}
+        {view === "ingredients" && <Ingredients data={data} openModal={setModal} />}
         {view === "recipes" && (
           <Recipes
             data={data}
             recipeLines={recipeLines}
             setRecipeLines={setRecipeLines}
-            saveRecipe={saveRecipe}
-            busy={busy}
+            openModal={setModal}
           />
         )}
         {view === "costing" && (
@@ -496,6 +585,22 @@ export default function App() {
         {view === "admin" && isAdmin && (
           <Admin data={data} busy={busy} loadAdminOverview={loadAdminOverview} loadAdminDetail={loadAdminDetail} />
         )}
+
+        {modal === "purchase" && (
+          <Modal title="Nueva compra" onClose={() => setModal(null)}>
+            <PurchaseForm ingredientOptions={ingredientOptions} savePurchase={savePurchase} busy={busy} />
+          </Modal>
+        )}
+        {modal === "ingredient" && (
+          <Modal title="Nuevo ingrediente" onClose={() => setModal(null)}>
+            <IngredientForm saveIngredient={saveIngredient} busy={busy} />
+          </Modal>
+        )}
+        {modal === "recipe" && (
+          <Modal title="Nueva receta" onClose={() => setModal(null)}>
+            <RecipeForm data={data} recipeLines={recipeLines} setRecipeLines={setRecipeLines} saveRecipe={saveRecipe} busy={busy} />
+          </Modal>
+        )}
       </main>
     </div>
   );
@@ -504,31 +609,48 @@ export default function App() {
 function Dashboard({ data }) {
   const mostExpensive = data.recipeCosts.length ? Math.max(...data.recipeCosts.map((recipe) => recipe.ingredientCost)) : 0;
   const recentPurchases = [...data.purchases].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 6);
+  const totalPurchases = data.purchases.reduce((sum, purchase) => sum + Number(purchase.price ?? 0), 0);
+  const productHistory = data.ingredients.map((ingredient) => ({
+    ingredient,
+    purchases: data.purchases
+      .filter((purchase) => purchase.ingredientId === ingredient.id)
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .map((purchase) => ({
+        date: purchase.date,
+        price: Number(purchase.unitPrice),
+        total: Number(purchase.price),
+        label: `${purchase.quantity} ${unitLabel(purchase.unit)}`
+      }))
+  })).filter((item) => item.purchases.length);
 
   return (
-    <div className="grid gap-5">
+    <div className="grid gap-6">
       <div className="grid gap-4 md:grid-cols-4">
-        <Metric label="Ingredientes" value={data.ingredients.length} />
-        <Metric label="Recetas" value={data.recipes.length} />
-        <Metric label="Compras registradas" value={data.purchases.length} />
-        <Metric label="Receta mas cara" value={money.format(mostExpensive)} />
+        <Metric icon={Package} label="Ingredientes" value={data.ingredients.length} helper="catalogados" />
+        <Metric icon={ClipboardList} label="Recetas" value={data.recipes.length} helper="activas" />
+        <Metric icon={ShoppingBag} label="Compras" value={data.purchases.length} helper={money.format(totalPurchases)} />
+        <Metric icon={Calculator} label="Mayor costo" value={money.format(mostExpensive)} helper="solo ingredientes" />
       </div>
       <div className="grid gap-5 xl:grid-cols-2">
         <Panel>
-          <h2 className="mb-4 font-black">Ultimas compras</h2>
-          <Table headers={["Fecha", "Ingrediente", "Medida", "Precio unit."]}>
-            {recentPurchases.map((purchase) => (
-              <tr key={purchase.id}>
-                <td>{purchase.date}</td>
-                <td>{purchase.ingredientName}</td>
-                <td>{purchase.quantity} {unitLabel(purchase.unit)}</td>
-                <td className="text-right">{money.format(purchase.unitPrice)}</td>
-              </tr>
-            ))}
-          </Table>
+          <SectionHeader title="Ultimas compras" copy="Referencia rapida para detectar cambios de precio." />
+          {recentPurchases.length ? (
+            <Table headers={["Fecha", "Ingrediente", "Medida", "Precio unit."]}>
+              {recentPurchases.map((purchase) => (
+                <tr key={purchase.id}>
+                  <td>{purchase.date}</td>
+                  <td><strong>{purchase.ingredientName}</strong></td>
+                  <td>{purchase.quantity} {unitLabel(purchase.unit)}</td>
+                  <td className="text-right font-semibold">{money.format(purchase.unitPrice)}</td>
+                </tr>
+              ))}
+            </Table>
+          ) : (
+            <EmptyState icon={ShoppingBag} title="Aun no hay compras" copy="Registra una compra para comenzar el historico de precios." />
+          )}
         </Panel>
         <Panel>
-          <h2 className="mb-4 font-black">Costos por receta</h2>
+          <SectionHeader title="Costos por receta" copy="Costo base calculado con el ultimo precio conocido." />
           <div className="grid gap-3">
             {data.recipeCosts.map((recipe) => (
               <div className="item flex justify-between gap-4" key={recipe.recipeId}>
@@ -539,19 +661,70 @@ function Dashboard({ data }) {
                 <strong>{money.format(recipe.ingredientCost)}</strong>
               </div>
             ))}
-            {!data.recipeCosts.length && <p className="text-sm text-muted">Agrega una receta para verla aca.</p>}
+            {!data.recipeCosts.length && <EmptyState icon={ClipboardList} title="Sin recetas costeadas" copy="Crea una receta con ingredientes para verla en este resumen." />}
           </div>
         </Panel>
       </div>
+      <Panel>
+        <SectionHeader
+          title="Historico por producto"
+          copy="Evolucion del precio unitario por ingrediente y fecha de compra."
+          action={<span className="pill"><LineChartIcon className="h-3.5 w-3.5" /> {productHistory.length} productos</span>}
+        />
+        {productHistory.length ? (
+          <div className="grid gap-4 xl:grid-cols-2">
+            {productHistory.map(({ ingredient, purchases }) => (
+              <article className="item" key={ingredient.id}>
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <div>
+                    <strong>{ingredient.name}</strong>
+                    <p className="text-sm text-muted">{purchases.length} compra{purchases.length === 1 ? "" : "s"} registradas</p>
+                  </div>
+                  <span className="pill">{unitLabel(ingredient.baseUnit)}</span>
+                </div>
+                <div className="h-44">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={purchases} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+                      <CartesianGrid stroke="#d6e0ee" strokeDasharray="3 3" vertical={false} />
+                      <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#617089" }} tickLine={false} axisLine={false} />
+                      <YAxis tick={{ fontSize: 11, fill: "#617089" }} tickLine={false} axisLine={false} width={58} tickFormatter={(value) => money.format(value)} />
+                      <Tooltip formatter={(value) => [money.format(Number(value)), "Precio unit."]} labelFormatter={(label) => `Fecha: ${label}`} />
+                      <Line type="monotone" dataKey="price" stroke="#2563eb" strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="mt-3 grid gap-2">
+                  {purchases.slice(-3).reverse().map((purchase) => (
+                    <div className="flex justify-between gap-3 text-sm" key={`${ingredient.id}-${purchase.date}-${purchase.total}`}>
+                      <span className="text-muted">{purchase.date} - {purchase.label}</span>
+                      <strong>{money.format(purchase.price)}</strong>
+                    </div>
+                  ))}
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <EmptyState icon={LineChartIcon} title="Sin historico de productos" copy="Registra compras para visualizar graficos por ingrediente." />
+        )}
+      </Panel>
     </div>
   );
 }
 
-function Metric({ label, value }) {
+function Metric({ icon: Icon, label, value, helper }) {
   return (
     <article className="panel">
-      <small className="text-sm text-muted">{label}</small>
-      <strong className="mt-2 block text-2xl">{value}</strong>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <small className="text-sm font-semibold text-muted">{label}</small>
+          <strong className="mt-2 block text-2xl tracking-tight">{value}</strong>
+          {helper && <span className="mt-1 block text-xs text-muted">{helper}</span>}
+        </div>
+        <span className="grid h-10 w-10 place-items-center rounded-lg bg-blue-50 text-brand">
+          <Icon className="h-5 w-5" />
+        </span>
+      </div>
     </article>
   );
 }
@@ -563,134 +736,172 @@ function Table({ headers, children }) {
         <thead>
           <tr>{headers.map((header) => <th key={header} className={header.includes("Precio") || header.includes("Total") || header === "Compras" || header === "Recetas" ? "text-right" : ""}>{header}</th>)}</tr>
         </thead>
-        <tbody>{children}</tbody>
+        <tbody className="[&_tr:hover]:bg-[#f8fbff]">{children}</tbody>
       </table>
     </div>
   );
 }
 
-function Purchases({ data, ingredientOptions, savePurchase, busy }) {
+function PurchaseForm({ ingredientOptions, savePurchase, busy }) {
   return (
-    <div className="grid gap-5 xl:grid-cols-[0.8fr_1.4fr]">
+    <form onSubmit={savePurchase} className="grid gap-4">
+      <Field label="Fecha"><input name="date" type="date" defaultValue={new Date().toISOString().slice(0, 10)} required /></Field>
+      <Field label="Ingrediente">
+        <select name="ingredientId" required>{ingredientOptions.map((ingredient) => <option key={ingredient.id} value={ingredient.id}>{ingredient.name}</option>)}</select>
+      </Field>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Cantidad"><input name="quantity" type="number" min="0.01" step="0.01" required /></Field>
+        <Field label="Unidad">
+          <select name="unit" required>{["g", "kg", "ml", "l", "unidad"].map((unit) => <option key={unit} value={unit}>{unitLabel(unit)}</option>)}</select>
+        </Field>
+      </div>
+      <Field label="Precio pagado"><input name="price" type="number" min="1" step="1" required /></Field>
+      <button className="btn-primary" disabled={busy === "purchase"}>{busy === "purchase" ? <><Spinner /> Guardando</> : <><Save className="h-4 w-4" /> Guardar compra</>}</button>
+    </form>
+  );
+}
+
+function Purchases({ data, openModal }) {
+  return (
+    <div className="grid gap-5">
       <Panel>
-        <form onSubmit={savePurchase} className="grid gap-4">
-          <h2 className="font-black">Nueva compra</h2>
-          <Field label="Fecha"><input name="date" type="date" defaultValue={new Date().toISOString().slice(0, 10)} required /></Field>
-          <Field label="Ingrediente">
-            <select name="ingredientId" required>{ingredientOptions.map((ingredient) => <option key={ingredient.id} value={ingredient.id}>{ingredient.name}</option>)}</select>
-          </Field>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Cantidad"><input name="quantity" type="number" min="0.01" step="0.01" required /></Field>
-            <Field label="Unidad">
-              <select name="unit" required>{["g", "kg", "ml", "l", "unidad"].map((unit) => <option key={unit} value={unit}>{unitLabel(unit)}</option>)}</select>
-            </Field>
+        <SectionHeader
+          title="Historico de precios"
+          copy="Compras ordenadas por fecha para comparar variaciones."
+          action={<button className="btn-primary" onClick={() => openModal("purchase")}><Plus className="h-4 w-4" /> Nueva compra</button>}
+        />
+        {data.purchases.length ? (
+          <Table headers={["Fecha", "Ingrediente", "Compra", "Precio unitario"]}>
+            {data.purchases.map((purchase) => (
+              <tr key={purchase.id}>
+                <td>{purchase.date}</td>
+                <td><strong>{purchase.ingredientName}</strong></td>
+                <td>{purchase.quantity} {unitLabel(purchase.unit)} por {money.format(purchase.price)}</td>
+                <td className="text-right font-semibold">{money.format(purchase.unitPrice)}</td>
+              </tr>
+            ))}
+          </Table>
+        ) : (
+          <EmptyState icon={ShoppingBag} title="Sin compras registradas" copy="Cuando guardes compras, apareceran aqui con su precio unitario." />
+        )}
+      </Panel>
+    </div>
+  );
+}
+
+function IngredientForm({ saveIngredient, busy }) {
+  return (
+    <form onSubmit={saveIngredient} className="grid gap-4">
+      <Field label="Nombre"><input name="name" type="text" placeholder="Harina, azucar, huevos" required /></Field>
+      <Field label="Unidad base">
+        <select name="baseUnit" required>{["g", "ml", "unidad"].map((unit) => <option key={unit} value={unit}>{unitLabel(unit)}</option>)}</select>
+      </Field>
+      <button className="btn-primary" disabled={busy === "ingredient"}>{busy === "ingredient" ? <><Spinner /> Guardando</> : <><Save className="h-4 w-4" /> Guardar ingrediente</>}</button>
+    </form>
+  );
+}
+
+function Ingredients({ data, openModal }) {
+  return (
+    <div className="grid gap-5">
+      <Panel>
+        <SectionHeader
+          title="Lista de ingredientes"
+          copy="Catalogo disponible para compras y recetas."
+          action={<button className="btn-primary" onClick={() => openModal("ingredient")}><Plus className="h-4 w-4" /> Nuevo ingrediente</button>}
+        />
+        {data.ingredients.length ? (
+          <div className="grid gap-3 md:grid-cols-2">
+            {data.ingredients.map((ingredient) => (
+              <article key={ingredient.id} className="item">
+                <div className="flex items-start justify-between gap-3">
+                  <strong>{ingredient.name}</strong>
+                  <span className="pill">{unitLabel(ingredient.baseUnit)}</span>
+                </div>
+                <p className="mt-3 text-sm text-muted">
+                  Ultimo precio: {ingredient.latestUnitPrice ? `${money.format(ingredient.latestUnitPrice)} / ${unitLabel(ingredient.baseUnit)}` : "sin compras"}
+                </p>
+              </article>
+            ))}
           </div>
-          <Field label="Precio pagado"><input name="price" type="number" min="1" step="1" required /></Field>
-          <button className="btn-primary" disabled={busy === "purchase"}>{busy === "purchase" ? "Guardando..." : "Guardar compra"}</button>
-        </form>
-      </Panel>
-      <Panel>
-        <h2 className="mb-4 font-black">Historico de precios</h2>
-        <Table headers={["Fecha", "Ingrediente", "Compra", "Precio unitario"]}>
-          {data.purchases.map((purchase) => (
-            <tr key={purchase.id}>
-              <td>{purchase.date}</td>
-              <td>{purchase.ingredientName}</td>
-              <td>{purchase.quantity} {unitLabel(purchase.unit)} por {money.format(purchase.price)}</td>
-              <td className="text-right">{money.format(purchase.unitPrice)}</td>
-            </tr>
-          ))}
-        </Table>
+        ) : (
+          <EmptyState icon={Package} title="Sin ingredientes" copy="Agrega ingredientes antes de registrar recetas o compras." />
+        )}
       </Panel>
     </div>
   );
 }
 
-function Ingredients({ data, saveIngredient, busy }) {
-  return (
-    <div className="grid gap-5 xl:grid-cols-[0.8fr_1.4fr]">
-      <Panel>
-        <form onSubmit={saveIngredient} className="grid gap-4">
-          <h2 className="font-black">Nuevo ingrediente</h2>
-          <Field label="Nombre"><input name="name" type="text" placeholder="Harina, azucar, huevos" required /></Field>
-          <Field label="Unidad base">
-            <select name="baseUnit" required>{["g", "ml", "unidad"].map((unit) => <option key={unit} value={unit}>{unitLabel(unit)}</option>)}</select>
-          </Field>
-          <button className="btn-primary" disabled={busy === "ingredient"}>{busy === "ingredient" ? "Guardando..." : "Guardar ingrediente"}</button>
-        </form>
-      </Panel>
-      <Panel>
-        <h2 className="mb-4 font-black">Lista de ingredientes</h2>
-        <div className="grid gap-3 md:grid-cols-2">
-          {data.ingredients.map((ingredient) => (
-            <article key={ingredient.id} className="item">
-              <strong>{ingredient.name}</strong>
-              <p className="mt-2 text-sm text-muted">Unidad base: {unitLabel(ingredient.baseUnit)}</p>
-              <p className="mt-1 text-sm text-muted">
-                Ultimo precio: {ingredient.latestUnitPrice ? `${money.format(ingredient.latestUnitPrice)} / ${unitLabel(ingredient.baseUnit)}` : "sin compras"}
-              </p>
-            </article>
-          ))}
-        </div>
-      </Panel>
-    </div>
-  );
-}
-
-function Recipes({ data, recipeLines, setRecipeLines, saveRecipe, busy }) {
+function RecipeForm({ data, recipeLines, setRecipeLines, saveRecipe, busy }) {
   function updateLine(index, patch) {
     setRecipeLines((current) => current.map((line, currentIndex) => currentIndex === index ? { ...line, ...patch } : line));
   }
 
   return (
-    <div className="grid gap-5 xl:grid-cols-[0.85fr_1.3fr]">
-      <Panel>
-        <form onSubmit={saveRecipe} className="grid gap-4">
-          <h2 className="font-black">Nueva receta</h2>
-          <Field label="Nombre"><input name="name" type="text" placeholder="Torta de chocolate" required /></Field>
-          <Field label="Personas o porciones"><input name="servings" type="number" min="1" step="1" required /></Field>
-          <div className="grid gap-3">
-            {recipeLines.map((line, index) => (
-              <div className="grid gap-3 rounded-lg border border-line bg-[#f8fbfa] p-3 lg:grid-cols-[1.2fr_0.7fr_0.7fr_auto]" key={index}>
-                <Field label="Ingrediente">
-                  <select value={line.ingredientId} onChange={(event) => {
-                    const ingredient = data.ingredients.find((item) => item.id === event.target.value);
-                    updateLine(index, { ingredientId: event.target.value, unit: ingredient?.baseUnit ?? line.unit });
-                  }} required>
-                    {data.ingredients.map((ingredient) => <option key={ingredient.id} value={ingredient.id}>{ingredient.name}</option>)}
-                  </select>
-                </Field>
-                <Field label="Cantidad"><input value={line.quantity} onChange={(event) => updateLine(index, { quantity: event.target.value })} type="number" min="0.01" step="0.01" required /></Field>
-                <Field label="Unidad">
-                  <select value={line.unit} onChange={(event) => updateLine(index, { unit: event.target.value })} required>
-                    {["g", "kg", "ml", "l", "unidad"].map((unit) => <option key={unit} value={unit}>{unitLabel(unit)}</option>)}
-                  </select>
-                </Field>
-                <button className="btn-ghost self-end" type="button" onClick={() => setRecipeLines((current) => current.filter((_, currentIndex) => currentIndex !== index))}>Quitar</button>
-              </div>
-            ))}
+    <form onSubmit={saveRecipe} className="grid gap-4">
+      <Field label="Nombre"><input name="name" type="text" placeholder="Torta de chocolate" required /></Field>
+      <Field label="Personas o porciones"><input name="servings" type="number" min="1" step="1" required /></Field>
+      <div className="grid gap-3">
+        {recipeLines.map((line, index) => (
+          <div className="grid gap-3 rounded-lg border border-line bg-[#f8fbff] p-3 lg:grid-cols-[1.2fr_0.7fr_0.7fr_auto]" key={index}>
+            <Field label="Ingrediente">
+              <select value={line.ingredientId} onChange={(event) => {
+                const ingredient = data.ingredients.find((item) => item.id === event.target.value);
+                updateLine(index, { ingredientId: event.target.value, unit: ingredient?.baseUnit ?? line.unit });
+              }} required>
+                {data.ingredients.map((ingredient) => <option key={ingredient.id} value={ingredient.id}>{ingredient.name}</option>)}
+              </select>
+            </Field>
+            <Field label="Cantidad"><input value={line.quantity} onChange={(event) => updateLine(index, { quantity: event.target.value })} type="number" min="0.01" step="0.01" required /></Field>
+            <Field label="Unidad">
+              <select value={line.unit} onChange={(event) => updateLine(index, { unit: event.target.value })} required>
+                {["g", "kg", "ml", "l", "unidad"].map((unit) => <option key={unit} value={unit}>{unitLabel(unit)}</option>)}
+              </select>
+            </Field>
+            <button className="btn-subtle self-end" type="button" onClick={() => setRecipeLines((current) => current.filter((_, currentIndex) => currentIndex !== index))}>
+              <Trash2 className="h-4 w-4" /> Quitar
+            </button>
           </div>
-          <button className="btn-ghost" type="button" onClick={() => setRecipeLines((current) => [...current, { ingredientId: data.ingredients[0]?.id || "", quantity: 100, unit: data.ingredients[0]?.baseUnit || "g" }])}>Agregar ingrediente</button>
-          <button className="btn-primary" disabled={busy === "recipe"}>{busy === "recipe" ? "Guardando..." : "Guardar receta"}</button>
-        </form>
-      </Panel>
+        ))}
+      </div>
+      <button className="btn-ghost" type="button" onClick={() => setRecipeLines((current) => [...current, { ingredientId: data.ingredients[0]?.id || "", quantity: 100, unit: data.ingredients[0]?.baseUnit || "g" }])}>
+        <Plus className="h-4 w-4" /> Agregar ingrediente
+      </button>
+      <button className="btn-primary" disabled={busy === "recipe"}>{busy === "recipe" ? <><Spinner /> Guardando</> : <><Save className="h-4 w-4" /> Guardar receta</>}</button>
+    </form>
+  );
+}
+
+function Recipes({ data, openModal }) {
+  return (
+    <div className="grid gap-5">
       <Panel>
-        <h2 className="mb-4 font-black">Recetas guardadas</h2>
-        <div className="grid gap-3">
-          {data.recipes.map((recipe) => {
-            const cost = data.recipeCosts.find((item) => item.recipeId === recipe.id)?.ingredientCost ?? recipeIngredientCost(recipe, data.ingredients, data.purchases);
-            return (
-              <article key={recipe.id} className="item">
-                <div className="flex justify-between gap-4">
-                  <strong>{recipe.name}</strong>
-                  <strong>{money.format(cost)}</strong>
-                </div>
-                <p className="mt-2 text-sm text-muted">{recipe.servings} porciones</p>
-                <p className="mt-2 text-sm">{recipe.items.map((item) => `${item.ingredientName}: ${item.quantity} ${unitLabel(item.unit)}`).join(", ")}</p>
-              </article>
-            );
-          })}
-        </div>
+        <SectionHeader
+          title="Recetas guardadas"
+          copy="Costo base segun ingredientes y ultimo precio de compra."
+          action={<button className="btn-primary" onClick={() => openModal("recipe")}><Plus className="h-4 w-4" /> Nueva receta</button>}
+        />
+        {data.recipes.length ? (
+          <div className="grid gap-3">
+            {data.recipes.map((recipe) => {
+              const cost = data.recipeCosts.find((item) => item.recipeId === recipe.id)?.ingredientCost ?? recipeIngredientCost(recipe, data.ingredients, data.purchases);
+              return (
+                <article key={recipe.id} className="item">
+                  <div className="flex justify-between gap-4">
+                    <div>
+                      <strong>{recipe.name}</strong>
+                      <p className="mt-1 text-sm text-muted">{recipe.servings} porciones</p>
+                    </div>
+                    <strong>{money.format(cost)}</strong>
+                  </div>
+                  <p className="mt-3 text-sm leading-6">{recipe.items.map((item) => `${item.ingredientName}: ${item.quantity} ${unitLabel(item.unit)}`).join(", ")}</p>
+                </article>
+              );
+            })}
+          </div>
+        ) : (
+          <EmptyState icon={ClipboardList} title="Sin recetas" copy="Crea una receta base para comenzar a costear preparaciones." />
+        )}
       </Panel>
     </div>
   );
@@ -703,15 +914,18 @@ function Costing({ data, costInput, setCostInput, costResult }) {
 
   return (
     <Panel className="max-w-6xl">
-      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h2 className="font-black">Calculadora de costo</h2>
-        <select className="sm:max-w-sm" value={costInput.recipeId} onChange={(event) => {
-          const recipe = data.recipes.find((item) => item.id === event.target.value);
-          update({ recipeId: event.target.value, targetServings: recipe?.servings ?? 10, laborHours: recipe?.laborHours || 3 });
-        }}>
-          {data.recipes.map((recipe) => <option key={recipe.id} value={recipe.id}>{recipe.name}</option>)}
-        </select>
-      </div>
+      <SectionHeader
+        title="Calculadora de costo"
+        copy="Ajusta porciones, horas, gastos y margen para obtener un precio sugerido."
+        action={
+          <select className="sm:max-w-sm" value={costInput.recipeId} onChange={(event) => {
+            const recipe = data.recipes.find((item) => item.id === event.target.value);
+            update({ recipeId: event.target.value, targetServings: recipe?.servings ?? 10, laborHours: recipe?.laborHours || 3 });
+          }}>
+            {data.recipes.map((recipe) => <option key={recipe.id} value={recipe.id}>{recipe.name}</option>)}
+          </select>
+        }
+      />
       <div className="grid gap-5 lg:grid-cols-[420px_minmax(0,1fr)]">
         <form className="grid gap-4">
           {[
@@ -727,7 +941,7 @@ function Costing({ data, costInput, setCostInput, costResult }) {
             </Field>
           ))}
         </form>
-        <div className="panel shadow-none">
+        <div className="rounded-lg border border-line bg-[#f8fbff] p-5">
           <ResultLine label="Ingredientes" value={costResult?.ingredient_cost} />
           <ResultLine label="Mano de obra" value={costResult?.labor_cost} />
           <ResultLine label="Gastos" value={costResult?.overhead_cost} />
@@ -753,12 +967,12 @@ function Settings({ data, saveSettings, busy }) {
   return (
     <Panel className="max-w-xl">
       <form onSubmit={saveSettings} className="grid gap-4">
-        <h2 className="font-black">Parametros por defecto</h2>
+        <SectionHeader title="Parametros por defecto" copy="Valores usados como base para nuevos calculos." />
         <Field label="Costo hora mano de obra"><input name="hourlyRate" type="number" min="0" step="1" defaultValue={data.settings.hourlyRate} /></Field>
         <Field label="Luz / agua / gas por receta"><input name="utilities" type="number" min="0" step="1" defaultValue={data.settings.utilities} /></Field>
         <Field label="Otros gastos por receta"><input name="otherCosts" type="number" min="0" step="1" defaultValue={data.settings.otherCosts} /></Field>
         <Field label="Margen deseado %"><input name="margin" type="number" min="0" max="95" step="1" defaultValue={data.settings.margin} /></Field>
-        <button className="btn-primary" disabled={busy === "settings"}>{busy === "settings" ? "Guardando..." : "Guardar parametros"}</button>
+        <button className="btn-primary" disabled={busy === "settings"}>{busy === "settings" ? <><Spinner /> Guardando</> : <><Save className="h-4 w-4" /> Guardar parametros</>}</button>
       </form>
     </Panel>
   );
@@ -768,27 +982,37 @@ function Admin({ data, busy, loadAdminOverview, loadAdminDetail }) {
   return (
     <div className="grid gap-5 xl:grid-cols-[1.1fr_1.2fr]">
       <Panel>
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <h2 className="font-black">Usuarios</h2>
-          <button className="btn-ghost" onClick={loadAdminOverview} disabled={busy === "admin"}>{busy === "admin" ? "Actualizando..." : "Actualizar"}</button>
-        </div>
-        <Table headers={["Email", "Compras", "Recetas", "Total compras"]}>
-          {data.adminUsers.map((user) => (
-            <tr key={user.user_id} onClick={() => loadAdminDetail(user.user_id)} className="cursor-pointer hover:bg-[#f8fbfa]">
-              <td>
-                <strong>{user.email}</strong>
-                <div className="text-xs text-muted">{user.created_at?.slice(0, 10)}</div>
-              </td>
-              <td className="text-right">{Number(user.purchase_count ?? 0)}</td>
-              <td className="text-right">{Number(user.recipe_count ?? 0)}</td>
-              <td className="text-right">{money.format(Number(user.total_purchase_amount ?? 0))}</td>
-            </tr>
-          ))}
-        </Table>
+        <SectionHeader
+          title="Usuarios"
+          copy="Resumen de actividad y datos registrados por cuenta."
+          action={<button className="btn-ghost" onClick={loadAdminOverview} disabled={busy === "admin"}>{busy === "admin" ? <><Spinner /> Actualizando</> : <><RefreshCw className="h-4 w-4" /> Actualizar</>}</button>}
+        />
+        {data.adminUsers.length ? (
+          <Table headers={["Email", "Compras", "Recetas", "Total compras"]}>
+            {data.adminUsers.map((user) => (
+            <tr key={user.user_id} onClick={() => loadAdminDetail(user.user_id)} className="cursor-pointer hover:bg-[#f8fbff]">
+                <td>
+                  <div className="flex items-center gap-3">
+                    <span className="grid h-9 w-9 place-items-center rounded-lg bg-blue-50 text-brand"><UserRound className="h-4 w-4" /></span>
+                    <div>
+                      <strong>{user.email}</strong>
+                      <div className="text-xs text-muted">{user.created_at?.slice(0, 10)}</div>
+                    </div>
+                  </div>
+                </td>
+                <td className="text-right">{Number(user.purchase_count ?? 0)}</td>
+                <td className="text-right">{Number(user.recipe_count ?? 0)}</td>
+                <td className="text-right font-semibold">{money.format(Number(user.total_purchase_amount ?? 0))}</td>
+              </tr>
+            ))}
+          </Table>
+        ) : (
+          <EmptyState icon={ShieldCheck} title="Sin datos de usuarios" copy="Actualiza la vista para cargar el resumen administrativo." />
+        )}
       </Panel>
       <Panel>
-        <h2 className="mb-4 font-black">Detalle usuario</h2>
-        {!data.adminDetail ? <p className="text-sm text-muted">Selecciona un usuario para revisar su informacion.</p> : <AdminDetail detail={data.adminDetail} />}
+        <SectionHeader title="Detalle usuario" copy="Informacion operativa del usuario seleccionado." />
+        {!data.adminDetail ? <EmptyState icon={UserRound} title="Selecciona un usuario" copy="El detalle aparecera en este panel." /> : <AdminDetail detail={data.adminDetail} />}
       </Panel>
     </div>
   );
