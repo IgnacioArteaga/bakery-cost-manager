@@ -15,7 +15,6 @@ import {
   Settings2,
   ShieldCheck,
   ShoppingBag,
-  Sparkles,
   Trash2,
   UserRound
 } from "lucide-react";
@@ -28,7 +27,6 @@ import {
   XAxis,
   YAxis
 } from "recharts";
-import { demoData } from "./lib/demoData";
 import { baseQuantity, money, unitLabel } from "./lib/format";
 import { mapIngredient, mapPurchase, mapRecipe, mapRecipeCost, mapSettings } from "./lib/mappers";
 import { supabase } from "./lib/supabase";
@@ -54,12 +52,17 @@ const views = [
 
 async function rpc(name, params = {}) {
   const { data, error } = await supabase.rpc(name, params);
-  if (error) throw error;
+  if (error) {
+    console.error("Supabase RPC error", { name, params, error });
+    throw error;
+  }
   return data;
 }
 
-function ingredientByName(ingredients, name) {
-  return ingredients.find((item) => item.name.toLowerCase() === name.toLowerCase());
+function showError(error, fallback = "No se pudo completar la operacion.") {
+  console.error(error);
+  const details = [error?.message, error?.details, error?.hint].filter(Boolean).join("\n");
+  alert(details || fallback);
 }
 
 function latestUnitCost(ingredients, purchases, ingredientId) {
@@ -122,8 +125,8 @@ function Spinner({ className = "h-4 w-4" }) {
 
 function Modal({ children, onClose, title }) {
   return (
-    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label={title}>
-      <div className="modal-panel">
+    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label={title} onMouseDown={onClose}>
+      <div className="modal-panel" onMouseDown={(event) => event.stopPropagation()}>
         <div className="mb-4 flex items-start justify-between gap-4 border-b border-line pb-4">
           <div>
             <h2 className="section-title">{title}</h2>
@@ -145,6 +148,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
   const [modal, setModal] = useState(null);
+  const [editing, setEditing] = useState(null);
   const [authMessage, setAuthMessage] = useState("");
   const [recipeLines, setRecipeLines] = useState([{ ingredientId: "", quantity: 100, unit: "g" }]);
   const [costInput, setCostInput] = useState({
@@ -164,6 +168,26 @@ export default function App() {
   const ingredientOptions = useMemo(() => data.ingredients, [data.ingredients]);
   const selectedRecipe = data.recipes.find((recipe) => recipe.id === costInput.recipeId) ?? data.recipes[0];
 
+  function openCreateModal(type) {
+    setEditing(null);
+    if (type === "recipe") {
+      setRecipeLines([{ ingredientId: data.ingredients[0]?.id || "", quantity: 100, unit: data.ingredients[0]?.baseUnit || "g" }]);
+    }
+    setModal(type);
+  }
+
+  function openEditModal(type, item) {
+    setEditing(item);
+    if (type === "recipe") {
+      setRecipeLines(item.items.map((line) => ({
+        ingredientId: line.ingredientId,
+        quantity: line.quantity,
+        unit: line.unit
+      })));
+    }
+    setModal(type);
+  }
+
   const refresh = useCallback(async () => {
     const admin = await rpc("sp_is_admin");
     setIsAdmin(Boolean(admin));
@@ -172,10 +196,10 @@ export default function App() {
     let settings = mapSettings(currentSettings);
     if (!currentSettings) {
       const saved = await rpc("sp_upsert_app_settings", {
-        p_hourly_rate: demoData.settings.hourlyRate,
-        p_utilities_cost: demoData.settings.utilities,
-        p_other_cost: demoData.settings.otherCosts,
-        p_target_margin: demoData.settings.margin
+        p_hourly_rate: 0,
+        p_utilities_cost: 0,
+        p_other_cost: 0,
+        p_target_margin: 0
       });
       settings = mapSettings(saved);
     }
@@ -262,7 +286,7 @@ export default function App() {
     }
 
     if (session && selectedRecipe) {
-      calculate().catch((error) => alert(error.message));
+      calculate().catch((error) => showError(error, "No se pudo calcular el costo."));
     }
   }, [costInput, selectedRecipe, session]);
 
@@ -304,81 +328,24 @@ export default function App() {
     await supabase.auth.signOut();
   }
 
-  async function loadDemoData() {
-    setBusy("demo");
-    try {
-      await rpc("sp_upsert_app_settings", {
-        p_hourly_rate: demoData.settings.hourlyRate,
-        p_utilities_cost: demoData.settings.utilities,
-        p_other_cost: demoData.settings.otherCosts,
-        p_target_margin: demoData.settings.margin
-      });
-
-      await refresh();
-      let ingredients = (await rpc("sp_list_ingredients")).map(mapIngredient);
-      for (const ingredient of demoData.ingredients) {
-        if (!ingredientByName(ingredients, ingredient.name)) {
-          await rpc("sp_save_ingredient", {
-            p_name: ingredient.name,
-            p_base_unit: ingredient.baseUnit
-          });
-        }
-      }
-
-      ingredients = (await rpc("sp_list_ingredients")).map(mapIngredient);
-      for (const purchase of demoData.purchases) {
-        const ingredient = ingredientByName(ingredients, purchase.ingredient);
-        await rpc("sp_save_purchase", {
-          p_ingredient_id: ingredient.id,
-          p_purchase_date: purchase.date,
-          p_quantity: purchase.quantity,
-          p_unit: purchase.unit,
-          p_total_price: purchase.price
-        });
-      }
-
-      const recipes = (await rpc("sp_list_recipes")).map(mapRecipe);
-      for (const recipe of demoData.recipes) {
-        if (recipes.some((item) => item.name.toLowerCase() === recipe.name.toLowerCase())) continue;
-
-        const savedRecipe = await rpc("sp_save_recipe", {
-          p_name: recipe.name,
-          p_servings: recipe.servings,
-          p_labor_hours: recipe.laborHours
-        });
-
-        await rpc("sp_replace_recipe_ingredients", {
-          p_recipe_id: savedRecipe.id,
-          p_items: recipe.items.map((item) => ({
-            ingredient_id: ingredientByName(ingredients, item.ingredient).id,
-            quantity: item.quantity,
-            unit: item.unit
-          }))
-        });
-      }
-
-      await refresh();
-    } catch (error) {
-      alert(error.message);
-    } finally {
-      setBusy("");
-    }
-  }
-
   async function saveIngredient(event) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    const name = form.get("name").trim();
     setBusy("ingredient");
     try {
+      if (!name) throw new Error("Ingresa un nombre para el ingrediente.");
       await rpc("sp_save_ingredient", {
-        p_name: form.get("name").trim(),
-        p_base_unit: form.get("baseUnit")
+        p_name: name,
+        p_base_unit: form.get("baseUnit"),
+        p_id: form.get("id") || null
       });
-      event.currentTarget.reset();
+      formElement.reset();
       setModal(null);
       await refresh();
     } catch (error) {
-      alert(error.message);
+      showError(error, "No se pudo guardar el ingrediente.");
     } finally {
       setBusy("");
     }
@@ -386,21 +353,26 @@ export default function App() {
 
   async function savePurchase(event) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    const ingredientId = form.get("ingredientId");
     setBusy("purchase");
     try {
+      if (!ingredientId) throw new Error("Primero crea un ingrediente para registrar compras.");
       await rpc("sp_save_purchase", {
-        p_ingredient_id: form.get("ingredientId"),
+        p_ingredient_id: ingredientId,
         p_purchase_date: form.get("date"),
         p_quantity: Number(form.get("quantity")),
         p_unit: form.get("unit"),
-        p_total_price: Number(form.get("price"))
+        p_total_price: Number(form.get("price")),
+        p_notes: null,
+        p_id: form.get("id") || null
       });
-      event.currentTarget.reset();
+      formElement.reset();
       setModal(null);
       await refresh();
     } catch (error) {
-      alert(error.message);
+      showError(error, "No se pudo guardar la compra.");
     } finally {
       setBusy("");
     }
@@ -408,28 +380,37 @@ export default function App() {
 
   async function saveRecipe(event) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    const name = form.get("name").trim();
+    const validLines = recipeLines
+      .filter((line) => line.ingredientId && Number(line.quantity) > 0 && line.unit)
+      .map((line) => ({
+        ingredient_id: line.ingredientId,
+        quantity: Number(line.quantity),
+        unit: line.unit
+      }));
     setBusy("recipe");
     try {
+      if (!name) throw new Error("Ingresa un nombre para la receta.");
+      if (!data.ingredients.length) throw new Error("Primero crea ingredientes para armar recetas.");
+      if (!validLines.length) throw new Error("Agrega al menos un ingrediente valido a la receta.");
       const recipe = await rpc("sp_save_recipe", {
-        p_name: form.get("name").trim(),
+        p_name: name,
         p_servings: Number(form.get("servings")),
-        p_labor_hours: 0
+        p_labor_hours: Number(form.get("laborHours") || 0),
+        p_id: form.get("id") || null
       });
       await rpc("sp_replace_recipe_ingredients", {
         p_recipe_id: recipe.id,
-        p_items: recipeLines.map((line) => ({
-          ingredient_id: line.ingredientId,
-          quantity: Number(line.quantity),
-          unit: line.unit
-        }))
+        p_items: validLines
       });
-      event.currentTarget.reset();
+      formElement.reset();
       setRecipeLines([{ ingredientId: data.ingredients[0]?.id || "", quantity: 100, unit: data.ingredients[0]?.baseUnit || "g" }]);
       setModal(null);
       await refresh();
     } catch (error) {
-      alert(error.message);
+      showError(error, "No se pudo guardar la receta.");
     } finally {
       setBusy("");
     }
@@ -448,7 +429,46 @@ export default function App() {
       });
       await refresh();
     } catch (error) {
-      alert(error.message);
+      showError(error, "No se pudieron guardar los parametros.");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function deleteIngredient(ingredient) {
+    if (!confirm(`Eliminar ingrediente "${ingredient.name}"?`)) return;
+    setBusy(`delete-ingredient-${ingredient.id}`);
+    try {
+      await rpc("sp_delete_ingredient", { p_ingredient_id: ingredient.id });
+      await refresh();
+    } catch (error) {
+      showError(error, "No se pudo eliminar el ingrediente.");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function deletePurchase(purchase) {
+    if (!confirm(`Eliminar compra de "${purchase.ingredientName}" del ${purchase.date}?`)) return;
+    setBusy(`delete-purchase-${purchase.id}`);
+    try {
+      await rpc("sp_delete_purchase", { p_purchase_id: purchase.id });
+      await refresh();
+    } catch (error) {
+      showError(error, "No se pudo eliminar la compra.");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function deleteRecipe(recipe) {
+    if (!confirm(`Eliminar receta "${recipe.name}"?`)) return;
+    setBusy(`delete-recipe-${recipe.id}`);
+    try {
+      await rpc("sp_delete_recipe", { p_recipe_id: recipe.id });
+      await refresh();
+    } catch (error) {
+      showError(error, "No se pudo eliminar la receta.");
     } finally {
       setBusy("");
     }
@@ -460,7 +480,7 @@ export default function App() {
       const adminUsers = await rpc("sp_admin_overview");
       setData((current) => ({ ...current, adminUsers }));
     } catch (error) {
-      alert(error.message);
+      showError(error, "No se pudo cargar la vista de administrador.");
     } finally {
       setBusy("");
     }
@@ -514,63 +534,66 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen lg:grid lg:grid-cols-[288px_minmax(0,1fr)]">
-      <aside className="bg-[#0f2a4a] p-5 text-white lg:sticky lg:top-0 lg:min-h-screen lg:p-6">
-        <div className="mb-8 flex items-center gap-3">
-          <span className="grid h-11 w-11 place-items-center rounded-lg bg-blue-100 text-blue-800 shadow-sm">
+    <div className="grid min-h-screen grid-cols-[88px_minmax(0,1fr)]">
+      <aside className="group fixed inset-y-0 left-0 z-40 flex w-[88px] flex-col overflow-hidden bg-[#0f2a4a] px-4 py-5 text-white transition-all duration-200 hover:w-72">
+        <div className="mb-8 flex h-12 items-center gap-3">
+          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-blue-100 text-blue-800 shadow-sm" title="Bakery Cost Manager">
             <ChefHat className="h-6 w-6" />
           </span>
-          <div>
-            <strong className="block">Bakery Cost Manager</strong>
+          <div className="hidden min-w-0 whitespace-nowrap group-hover:block">
+            <strong className="block leading-tight">Bakery Cost Manager</strong>
             <small className="text-blue-100/80">costos y recetas</small>
           </div>
         </div>
-        <nav className="grid gap-2 sm:grid-cols-3 lg:grid-cols-1">
+        <nav className="flex flex-1 flex-col gap-3">
           {navItems.map(([key, label, Icon]) => (
             <button
               key={key}
+              title={label}
+              aria-label={label}
               onClick={() => {
                 setView(key);
                 if (key === "admin") loadAdminOverview();
               }}
               className={`nav-button ${view === key ? "nav-button-active" : "nav-button-idle"}`}
             >
-              <Icon className="h-4 w-4" />
-              {label}
+              <Icon className="h-5 w-5 shrink-0" />
+              <span className="hidden whitespace-nowrap group-hover:inline">{label}</span>
             </button>
           ))}
         </nav>
-        <div className="mt-8 rounded-lg border border-white/10 bg-white/5 p-4 text-sm text-blue-100/80">
-          <p className="font-semibold text-white">Sesion activa</p>
-          <p className="mt-1 truncate">{session.user.email}</p>
+        <div className="mt-5 grid gap-3">
+          <div className="hidden min-w-0 rounded-lg border border-white/10 bg-white/5 p-3 text-sm text-blue-100/80 group-hover:block">
+            <p className="font-semibold text-white">Sesion activa</p>
+            <p className="mt-1 truncate">{session.user.email}</p>
+          </div>
+          <button className="nav-button nav-button-idle" onClick={signOut} title="Salir" aria-label="Salir">
+            <LogOut className="h-5 w-5 shrink-0" />
+            <span className="hidden whitespace-nowrap group-hover:inline">Salir</span>
+          </button>
         </div>
       </aside>
 
-      <main className="min-w-0 p-5 lg:p-8">
+      <main className="col-start-2 min-w-0 p-5 lg:p-8">
         <header className="mb-7 flex flex-col gap-4 border-b border-line pb-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="mb-1 text-xs font-black uppercase text-muted">Panel operativo</p>
             <h1 className="text-3xl font-black tracking-tight">{viewTitle}</h1>
           </div>
-          <div className="flex flex-wrap gap-3">
-            <button className="btn-ghost" onClick={loadDemoData} disabled={busy === "demo"}>
-              {busy === "demo" ? <><Spinner /> Cargando</> : <><Sparkles className="h-4 w-4" /> Cargar demo</>}
-            </button>
-            <button className="btn-subtle" onClick={signOut}><LogOut className="h-4 w-4" /> Salir</button>
-          </div>
         </header>
 
         {view === "dashboard" && <Dashboard data={data} />}
         {view === "purchases" && (
-          <Purchases data={data} openModal={setModal} />
+          <Purchases data={data} openModal={openCreateModal} openEditModal={openEditModal} deletePurchase={deletePurchase} busy={busy} />
         )}
-        {view === "ingredients" && <Ingredients data={data} openModal={setModal} />}
+        {view === "ingredients" && <Ingredients data={data} openModal={openCreateModal} openEditModal={openEditModal} deleteIngredient={deleteIngredient} busy={busy} />}
         {view === "recipes" && (
           <Recipes
             data={data}
-            recipeLines={recipeLines}
-            setRecipeLines={setRecipeLines}
-            openModal={setModal}
+            openModal={openCreateModal}
+            openEditModal={openEditModal}
+            deleteRecipe={deleteRecipe}
+            busy={busy}
           />
         )}
         {view === "costing" && (
@@ -587,18 +610,18 @@ export default function App() {
         )}
 
         {modal === "purchase" && (
-          <Modal title="Nueva compra" onClose={() => setModal(null)}>
-            <PurchaseForm ingredientOptions={ingredientOptions} savePurchase={savePurchase} busy={busy} />
+          <Modal title={editing ? "Editar compra" : "Nueva compra"} onClose={() => setModal(null)}>
+            <PurchaseForm ingredientOptions={ingredientOptions} savePurchase={savePurchase} busy={busy} editing={editing} />
           </Modal>
         )}
         {modal === "ingredient" && (
-          <Modal title="Nuevo ingrediente" onClose={() => setModal(null)}>
-            <IngredientForm saveIngredient={saveIngredient} busy={busy} />
+          <Modal title={editing ? "Editar ingrediente" : "Nuevo ingrediente"} onClose={() => setModal(null)}>
+            <IngredientForm saveIngredient={saveIngredient} busy={busy} editing={editing} />
           </Modal>
         )}
         {modal === "recipe" && (
-          <Modal title="Nueva receta" onClose={() => setModal(null)}>
-            <RecipeForm data={data} recipeLines={recipeLines} setRecipeLines={setRecipeLines} saveRecipe={saveRecipe} busy={busy} />
+          <Modal title={editing ? "Editar receta" : "Nueva receta"} onClose={() => setModal(null)}>
+            <RecipeForm data={data} recipeLines={recipeLines} setRecipeLines={setRecipeLines} saveRecipe={saveRecipe} busy={busy} editing={editing} />
           </Modal>
         )}
       </main>
@@ -742,42 +765,81 @@ function Table({ headers, children }) {
   );
 }
 
-function PurchaseForm({ ingredientOptions, savePurchase, busy }) {
+function RowActions({ onEdit, onDelete, deleting }) {
+  return (
+    <div className="flex flex-wrap justify-end gap-2">
+      <button className="btn-subtle min-h-9 px-3" type="button" onClick={onEdit}>Editar</button>
+      <button className="btn-subtle min-h-9 px-3 text-red-700 hover:bg-red-50" type="button" onClick={onDelete} disabled={deleting}>
+        {deleting ? <Spinner /> : <Trash2 className="h-4 w-4" />}
+        Eliminar
+      </button>
+    </div>
+  );
+}
+
+function compatibleUnits(baseUnit) {
+  if (baseUnit === "g") return ["g", "kg"];
+  if (baseUnit === "ml") return ["ml", "l"];
+  return ["unidad"];
+}
+
+function PurchaseForm({ ingredientOptions, savePurchase, busy, editing }) {
+  const [selectedIngredientId, setSelectedIngredientId] = useState(editing?.ingredientId || ingredientOptions[0]?.id || "");
+  const selectedIngredient = ingredientOptions.find((ingredient) => ingredient.id === selectedIngredientId);
+  const units = compatibleUnits(selectedIngredient?.baseUnit);
+
+  if (!ingredientOptions.length) {
+    return <EmptyState icon={Package} title="Primero crea un ingrediente" copy="Las compras necesitan asociarse a un ingrediente existente." />;
+  }
+
   return (
     <form onSubmit={savePurchase} className="grid gap-4">
-      <Field label="Fecha"><input name="date" type="date" defaultValue={new Date().toISOString().slice(0, 10)} required /></Field>
+      <input type="hidden" name="id" value={editing?.id || ""} />
+      <Field label="Fecha"><input name="date" type="date" defaultValue={editing?.date || new Date().toISOString().slice(0, 10)} required /></Field>
       <Field label="Ingrediente">
-        <select name="ingredientId" required>{ingredientOptions.map((ingredient) => <option key={ingredient.id} value={ingredient.id}>{ingredient.name}</option>)}</select>
+        <select name="ingredientId" value={selectedIngredientId} onChange={(event) => setSelectedIngredientId(event.target.value)} required>{ingredientOptions.map((ingredient) => <option key={ingredient.id} value={ingredient.id}>{ingredient.name}</option>)}</select>
       </Field>
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Cantidad"><input name="quantity" type="number" min="0.01" step="0.01" required /></Field>
+        <Field label="Cantidad"><input name="quantity" type="number" min="0.01" step="0.01" defaultValue={editing?.quantity || ""} required /></Field>
         <Field label="Unidad">
-          <select name="unit" required>{["g", "kg", "ml", "l", "unidad"].map((unit) => <option key={unit} value={unit}>{unitLabel(unit)}</option>)}</select>
+          <select name="unit" defaultValue={units.includes(editing?.unit) ? editing.unit : units[0]} required>{units.map((unit) => <option key={unit} value={unit}>{unitLabel(unit)}</option>)}</select>
         </Field>
       </div>
-      <Field label="Precio pagado"><input name="price" type="number" min="1" step="1" required /></Field>
-      <button className="btn-primary" disabled={busy === "purchase"}>{busy === "purchase" ? <><Spinner /> Guardando</> : <><Save className="h-4 w-4" /> Guardar compra</>}</button>
+      <p className="rounded-lg bg-blue-50 px-3 py-2 text-sm text-blue-900">Unidad base del ingrediente: {unitLabel(selectedIngredient?.baseUnit)}. Si ingresas kg o l, el sistema convierte a g o ml para el historico.</p>
+      <Field label="Precio pagado"><input name="price" type="number" min="1" step="1" defaultValue={editing?.price || ""} required /></Field>
+      <button className="btn-primary" disabled={busy === "purchase"}>{busy === "purchase" ? <><Spinner /> Guardando</> : <><Save className="h-4 w-4" /> {editing ? "Guardar cambios" : "Guardar compra"}</>}</button>
     </form>
   );
 }
 
-function Purchases({ data, openModal }) {
+function Purchases({ data, openModal, openEditModal, deletePurchase, busy }) {
   return (
     <div className="grid gap-5">
       <Panel>
         <SectionHeader
           title="Historico de precios"
           copy="Compras ordenadas por fecha para comparar variaciones."
-          action={<button className="btn-primary" onClick={() => openModal("purchase")}><Plus className="h-4 w-4" /> Nueva compra</button>}
+          action={
+            <button className="btn-primary" onClick={() => openModal("purchase")} disabled={!data.ingredients.length} title={!data.ingredients.length ? "Crea un ingrediente primero" : ""}>
+              <Plus className="h-4 w-4" /> Nueva compra
+            </button>
+          }
         />
         {data.purchases.length ? (
-          <Table headers={["Fecha", "Ingrediente", "Compra", "Precio unitario"]}>
+          <Table headers={["Fecha", "Ingrediente", "Compra", "Precio unitario", "Acciones"]}>
             {data.purchases.map((purchase) => (
               <tr key={purchase.id}>
                 <td>{purchase.date}</td>
                 <td><strong>{purchase.ingredientName}</strong></td>
                 <td>{purchase.quantity} {unitLabel(purchase.unit)} por {money.format(purchase.price)}</td>
                 <td className="text-right font-semibold">{money.format(purchase.unitPrice)}</td>
+                <td>
+                  <RowActions
+                    onEdit={() => openEditModal("purchase", purchase)}
+                    onDelete={() => deletePurchase(purchase)}
+                    deleting={busy === `delete-purchase-${purchase.id}`}
+                  />
+                </td>
               </tr>
             ))}
           </Table>
@@ -789,19 +851,20 @@ function Purchases({ data, openModal }) {
   );
 }
 
-function IngredientForm({ saveIngredient, busy }) {
+function IngredientForm({ saveIngredient, busy, editing }) {
   return (
     <form onSubmit={saveIngredient} className="grid gap-4">
-      <Field label="Nombre"><input name="name" type="text" placeholder="Harina, azucar, huevos" required /></Field>
+      <input type="hidden" name="id" value={editing?.id || ""} />
+      <Field label="Nombre"><input name="name" type="text" placeholder="Harina, azucar, huevos" defaultValue={editing?.name || ""} required /></Field>
       <Field label="Unidad base">
-        <select name="baseUnit" required>{["g", "ml", "unidad"].map((unit) => <option key={unit} value={unit}>{unitLabel(unit)}</option>)}</select>
+        <select name="baseUnit" defaultValue={editing?.baseUnit || "g"} required>{["g", "ml", "unidad"].map((unit) => <option key={unit} value={unit}>{unitLabel(unit)}</option>)}</select>
       </Field>
-      <button className="btn-primary" disabled={busy === "ingredient"}>{busy === "ingredient" ? <><Spinner /> Guardando</> : <><Save className="h-4 w-4" /> Guardar ingrediente</>}</button>
+      <button className="btn-primary" disabled={busy === "ingredient"}>{busy === "ingredient" ? <><Spinner /> Guardando</> : <><Save className="h-4 w-4" /> {editing ? "Guardar cambios" : "Guardar ingrediente"}</>}</button>
     </form>
   );
 }
 
-function Ingredients({ data, openModal }) {
+function Ingredients({ data, openModal, openEditModal, deleteIngredient, busy }) {
   return (
     <div className="grid gap-5">
       <Panel>
@@ -821,6 +884,13 @@ function Ingredients({ data, openModal }) {
                 <p className="mt-3 text-sm text-muted">
                   Ultimo precio: {ingredient.latestUnitPrice ? `${money.format(ingredient.latestUnitPrice)} / ${unitLabel(ingredient.baseUnit)}` : "sin compras"}
                 </p>
+                <div className="mt-4">
+                  <RowActions
+                    onEdit={() => openEditModal("ingredient", ingredient)}
+                    onDelete={() => deleteIngredient(ingredient)}
+                    deleting={busy === `delete-ingredient-${ingredient.id}`}
+                  />
+                </div>
               </article>
             ))}
           </div>
@@ -832,15 +902,23 @@ function Ingredients({ data, openModal }) {
   );
 }
 
-function RecipeForm({ data, recipeLines, setRecipeLines, saveRecipe, busy }) {
+function RecipeForm({ data, recipeLines, setRecipeLines, saveRecipe, busy, editing }) {
+  if (!data.ingredients.length) {
+    return <EmptyState icon={Package} title="Primero crea ingredientes" copy="Las recetas necesitan ingredientes para poder calcular costos." />;
+  }
+
   function updateLine(index, patch) {
     setRecipeLines((current) => current.map((line, currentIndex) => currentIndex === index ? { ...line, ...patch } : line));
   }
 
   return (
     <form onSubmit={saveRecipe} className="grid gap-4">
-      <Field label="Nombre"><input name="name" type="text" placeholder="Torta de chocolate" required /></Field>
-      <Field label="Personas o porciones"><input name="servings" type="number" min="1" step="1" required /></Field>
+      <input type="hidden" name="id" value={editing?.id || ""} />
+      <Field label="Nombre"><input name="name" type="text" placeholder="Torta de chocolate" defaultValue={editing?.name || ""} required /></Field>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Personas o porciones"><input name="servings" type="number" min="1" step="1" defaultValue={editing?.servings || ""} required /></Field>
+        <Field label="Horas de trabajo"><input name="laborHours" type="number" min="0" step="0.25" defaultValue={editing?.laborHours || 0} /></Field>
+      </div>
       <div className="grid gap-3">
         {recipeLines.map((line, index) => (
           <div className="grid gap-3 rounded-lg border border-line bg-[#f8fbff] p-3 lg:grid-cols-[1.2fr_0.7fr_0.7fr_auto]" key={index}>
@@ -867,24 +945,29 @@ function RecipeForm({ data, recipeLines, setRecipeLines, saveRecipe, busy }) {
       <button className="btn-ghost" type="button" onClick={() => setRecipeLines((current) => [...current, { ingredientId: data.ingredients[0]?.id || "", quantity: 100, unit: data.ingredients[0]?.baseUnit || "g" }])}>
         <Plus className="h-4 w-4" /> Agregar ingrediente
       </button>
-      <button className="btn-primary" disabled={busy === "recipe"}>{busy === "recipe" ? <><Spinner /> Guardando</> : <><Save className="h-4 w-4" /> Guardar receta</>}</button>
+      <button className="btn-primary" disabled={busy === "recipe"}>{busy === "recipe" ? <><Spinner /> Guardando</> : <><Save className="h-4 w-4" /> {editing ? "Guardar cambios" : "Guardar receta"}</>}</button>
     </form>
   );
 }
 
-function Recipes({ data, openModal }) {
+function Recipes({ data, openModal, openEditModal, deleteRecipe, busy }) {
   return (
     <div className="grid gap-5">
       <Panel>
         <SectionHeader
           title="Recetas guardadas"
           copy="Costo base segun ingredientes y ultimo precio de compra."
-          action={<button className="btn-primary" onClick={() => openModal("recipe")}><Plus className="h-4 w-4" /> Nueva receta</button>}
+          action={
+            <button className="btn-primary" onClick={() => openModal("recipe")} disabled={!data.ingredients.length} title={!data.ingredients.length ? "Crea ingredientes primero" : ""}>
+              <Plus className="h-4 w-4" /> Nueva receta
+            </button>
+          }
         />
         {data.recipes.length ? (
           <div className="grid gap-3">
             {data.recipes.map((recipe) => {
               const cost = data.recipeCosts.find((item) => item.recipeId === recipe.id)?.ingredientCost ?? recipeIngredientCost(recipe, data.ingredients, data.purchases);
+              const perServing = recipe.servings ? cost / recipe.servings : 0;
               return (
                 <article key={recipe.id} className="item">
                   <div className="flex justify-between gap-4">
@@ -892,9 +975,19 @@ function Recipes({ data, openModal }) {
                       <strong>{recipe.name}</strong>
                       <p className="mt-1 text-sm text-muted">{recipe.servings} porciones</p>
                     </div>
-                    <strong>{money.format(cost)}</strong>
+                    <div className="text-right">
+                      <strong className="block">{money.format(cost)}</strong>
+                      <span className="text-xs text-muted">{money.format(perServing)} / porcion</span>
+                    </div>
                   </div>
                   <p className="mt-3 text-sm leading-6">{recipe.items.map((item) => `${item.ingredientName}: ${item.quantity} ${unitLabel(item.unit)}`).join(", ")}</p>
+                  <div className="mt-4">
+                    <RowActions
+                      onEdit={() => openEditModal("recipe", recipe)}
+                      onDelete={() => deleteRecipe(recipe)}
+                      deleting={busy === `delete-recipe-${recipe.id}`}
+                    />
+                  </div>
                 </article>
               );
             })}

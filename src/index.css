@@ -85,11 +85,11 @@
   }
 
   .nav-button {
-    @apply flex items-center gap-3 rounded-lg px-4 py-3 text-left text-sm font-semibold transition;
+    @apply flex h-12 w-12 shrink-0 items-center justify-center gap-3 rounded-lg px-0 text-left text-sm font-semibold transition-all duration-200 group-hover:w-full group-hover:justify-start group-hover:px-3;
   }
 
   .nav-button-active {
-    @apply bg-white text-[#0f2a4a] shadow-sm;
+    @apply bg-white text-[#0f2a4a] shadow-sm ring-1 ring-white/70;
   }
 
   .nav-button-idle {

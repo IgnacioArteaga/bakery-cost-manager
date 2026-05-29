@@ -1,5 +1,3 @@
-import { demoData } from "./demoData";
-
 export function mapSettings(row) {
   return row
     ? {
@@ -8,7 +6,7 @@ export function mapSettings(row) {
         otherCosts: Number(row.other_cost),
         margin: Number(row.target_margin)
       }
-    : { ...demoData.settings };
+    : { hourlyRate: 0, utilities: 0, otherCosts: 0, margin: 0 };
 }
 
 export function mapIngredient(row) {
